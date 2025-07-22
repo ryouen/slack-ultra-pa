@@ -1,0 +1,246 @@
+---
+project: slack-personal-assistant
+created: 2025-01-22
+tasks:
+
+  # Step 1: Foundation & Core Infrastructure
+  step1_foundation:
+    title: "Step 1: Foundation & Core Infrastructure / ステップ1: 基盤とコアインフラ"
+    description: "Set up project structure, database, and basic Slack integration / プロジェクト構造、データベース、基本Slack統合のセットアップ"
+    priority: critical
+    estimated_hours: 16
+    blocked_by: []
+    subtasks:
+      - task_id: "1.1"
+        title: "Project Setup & Dependencies / プロジェクト設定と依存関係"
+        description: "Initialize Node.js/TypeScript project with Slack Bolt, Prisma, and testing framework"
+        requirements: ["Requirement 1"]
+        deliverables:
+          - "package.json with all dependencies"
+          - "TypeScript configuration"
+          - "ESLint and Prettier setup"
+          - "Basic project structure"
+        acceptance_criteria:
+          - "Project builds without errors"
+          - "All linting rules pass"
+          - "Test framework is configured"
+
+      - task_id: "1.2"
+        title: "Database Schema Design / データベーススキーマ設計"
+        description: "Create Prisma schema with 3-layer data architecture (core, personalization, analytics)"
+        requirements: ["Requirement 2", "Requirement 5"]
+        deliverables:
+          - "prisma/schema.prisma with all models"
+          - "Initial migration files"
+          - "Database connection utilities"
+        acceptance_criteria:
+          - "Database schema supports all MVP requirements"
+          - "3-layer architecture is implemented"
+          - "Foreign key relationships are properly defined"
+
+      - task_id: "1.3"
+        title: "Basic Slack Bot Setup / 基本Slackボット設定"
+        description: "Implement basic Slack Bolt app with authentication and message handling"
+        requirements: ["Requirement 1"]
+        blocked_by: ["1.1"]
+        deliverables:
+          - "src/app.ts with Slack Bolt initialization"
+          - "Environment variable configuration"
+          - "Basic message event handlers"
+          - "OAuth flow implementation"
+        acceptance_criteria:
+          - "Bot responds to mentions and DMs"
+          - "Authentication works correctly"
+          - "Error handling is implemented"
+
+      - task_id: "1.4"
+        title: "Multi-language Support Foundation / 多言語サポート基盤"
+        description: "Implement i18n system with Japanese and English support"
+        requirements: ["Requirement 1"]
+        blocked_by: ["1.1"]
+        deliverables:
+          - "src/i18n/ directory with language files"
+          - "Language detection utilities"
+          - "/lang command implementation"
+          - "User preference storage"
+        acceptance_criteria:
+          - "System detects message language automatically"
+          - "Users can switch languages with /lang command"
+          - "Language preferences are persisted"
+
+  # Step 2: Core Features Implementation
+  step2_core_features:
+    title: "Step 2: Core Features Implementation / ステップ2: コア機能実装"
+    description: "Implement smart task management and schedule intelligence / スマートタスク管理とスケジュール知能の実装"
+    priority: high
+    estimated_hours: 24
+    blocked_by: ["step1_foundation"]
+    subtasks:
+      - task_id: "2.1"
+        title: "Smart Task Management Core / スマートタスク管理コア"
+        description: "Implement AI-powered task creation, prioritization, and management"
+        requirements: ["Requirement 2"]
+        blocked_by: ["1.2", "1.3"]
+        deliverables:
+          - "src/services/taskService.ts"
+          - "AI prioritization algorithm"
+          - "Task CRUD operations"
+          - "Natural language task parsing"
+        acceptance_criteria:
+          - "Tasks can be created via natural language"
+          - "AI suggests priority and category"
+          - "Task completion patterns are learned"
+          - "Priority algorithm uses due date + completion history"
+
+      - task_id: "2.2"
+        title: "Google Calendar Integration / Googleカレンダー統合"
+        description: "Integrate with Google Calendar API for schedule management"
+        requirements: ["Requirement 3", "Requirement 5"]
+        blocked_by: ["1.2", "1.3"]
+        deliverables:
+          - "src/services/calendarService.ts"
+          - "Google OAuth2 implementation"
+          - "Calendar event monitoring"
+          - "Meeting preparation automation"
+        acceptance_criteria:
+          - "Calendar events are synchronized"
+          - "30-minute meeting prep notifications work"
+          - "Schedule conflicts are detected"
+          - "Related documents are automatically collected"
+
+      - task_id: "2.3"
+        title: "Gmail Integration / Gmail統合"
+        description: "Implement Gmail monitoring and email summarization"
+        requirements: ["Requirement 5"]
+        blocked_by: ["1.2", "1.3"]
+        deliverables:
+          - "src/services/gmailService.ts"
+          - "Email importance detection"
+          - "Email summarization logic"
+          - "Quick action buttons"
+        acceptance_criteria:
+          - "Important emails are detected and summarized"
+          - "Email summaries are sent to Slack"
+          - "Create Task and Remind Later buttons work"
+          - "Email-to-task conversion is seamless"
+
+      - task_id: "2.4"
+        title: "Google Drive Integration / Google Drive統合"
+        description: "Monitor Google Docs/Sheets for comments and mentions"
+        requirements: ["Requirement 5"]
+        blocked_by: ["1.2", "1.3"]
+        deliverables:
+          - "src/services/driveService.ts"
+          - "Document comment monitoring"
+          - "Mention detection system"
+          - "Document context extraction"
+        acceptance_criteria:
+          - "Document comments with mentions are detected"
+          - "Relevant sections are quoted in Slack"
+          - "One-click task creation from comments works"
+          - "Document links are properly formatted"
+
+  # Step 3: Advanced Features & Polish
+  step3_advanced:
+    title: "Step 3: Advanced Features & Polish / ステップ3: 高度な機能と仕上げ"
+    description: "Implement emotional intelligence, context awareness, and system polish / 感情知能、コンテキスト認識、システム仕上げの実装"
+    priority: medium
+    estimated_hours: 20
+    blocked_by: ["step2_core_features"]
+    subtasks:
+      - task_id: "3.1"
+        title: "Emotional Intelligence System / 感情知能システム"
+        description: "Implement context-aware communication and stress detection"
+        requirements: ["Requirement 4"]
+        blocked_by: ["2.1", "2.2"]
+        deliverables:
+          - "src/services/emotionalIntelligence.ts"
+          - "Message pattern analysis"
+          - "Stress detection algorithm"
+          - "Adaptive response system"
+        acceptance_criteria:
+          - "System detects user stress from message patterns"
+          - "Responses adapt to user emotional state"
+          - "Focus mode is automatically triggered"
+          - "Notification batching works during focus time"
+
+      - task_id: "3.2"
+        title: "Notion Integration / Notion統合"
+        description: "Integrate with Notion API for enhanced task and document management"
+        requirements: ["Requirement 5"]
+        blocked_by: ["2.1"]
+        deliverables:
+          - "src/services/notionService.ts"
+          - "Notion page monitoring"
+          - "Task synchronization"
+          - "Mention detection in Notion"
+        acceptance_criteria:
+          - "Notion page updates with mentions are detected"
+          - "Changes are summarized in Slack"
+          - "Task integration with Notion works"
+          - "Bidirectional sync is maintained"
+
+      - task_id: "3.3"
+        title: "Quick Action Buttons & UI Polish / クイックアクションボタンとUI仕上げ"
+        description: "Implement Slack Block Kit UI components and quick actions"
+        requirements: ["Requirement 1", "Requirement 2", "Requirement 5"]
+        blocked_by: ["2.1", "2.3", "2.4"]
+        deliverables:
+          - "src/ui/blockKitComponents.ts"
+          - "Quick action button handlers"
+          - "Interactive message components"
+          - "Improved user experience flows"
+        acceptance_criteria:
+          - "All interactions use rich Block Kit components"
+          - "Quick action buttons work reliably"
+          - "UI is consistent across all features"
+          - "User feedback is immediate and clear"
+
+      - task_id: "3.4"
+        title: "Testing & Quality Assurance / テストと品質保証"
+        description: "Comprehensive testing suite and quality improvements"
+        requirements: ["All Requirements"]
+        blocked_by: ["3.1", "3.2", "3.3"]
+        deliverables:
+          - "Unit tests with ≥80% coverage"
+          - "Integration tests for key workflows"
+          - "End-to-end tests for critical paths"
+          - "Performance optimization"
+        acceptance_criteria:
+          - "All tests pass consistently"
+          - "Code coverage meets requirements"
+          - "Performance benchmarks are met"
+          - "Error handling is comprehensive"
+
+      - task_id: "3.5"
+        title: "Documentation & Deployment Prep / ドキュメントとデプロイ準備"
+        description: "Create comprehensive documentation and prepare for deployment"
+        requirements: ["All Requirements"]
+        blocked_by: ["3.4"]
+        deliverables:
+          - "README.md with setup instructions"
+          - "API documentation"
+          - "User guide (JP/EN)"
+          - "Deployment configuration"
+        acceptance_criteria:
+          - "Documentation is complete and accurate"
+          - "Setup process is clearly documented"
+          - "Deployment is automated"
+          - "Both Japanese and English docs are provided"
+
+dependencies:
+  external:
+    - "Slack Workspace with admin access"
+    - "Google Workspace account"
+    - "Notion workspace (optional)"
+    - "AWS account for SES/S3 (Booster features)"
+  
+  apis:
+    - "Slack Web API & Events API"
+    - "Google Calendar API"
+    - "Gmail API"
+    - "Google Drive API"
+    - "Notion API"
+
+estimated_total_hours: 60
+target_completion: "4-6 weeks"
