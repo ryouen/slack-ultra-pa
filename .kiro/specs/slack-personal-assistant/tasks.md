@@ -173,6 +173,8 @@
 - [x] 10.1 Daily Top 5 Task Display / 日次Top5タスク表示
 
 
+
+
   - Implement morning 7:30 and /todo today command with priority cards
   - **Estimated Hours:** 3
   - **Requirements:** Requirement 2
@@ -185,13 +187,21 @@
   - **Acceptance Criteria:**
     - Top 5 tasks displayed as cards with 🔥⚡ badges
     - Cards include due dates and 📂 folder buttons
+
+
+
+
+
     - ✅ completion buttons work correctly
 
-- [ ] 10.2 Folder Quick Access Integration / フォルダクイックアクセス統合
+- [-] 10.2 Folder Quick Access Integration / フォルダクイックアクセス統合
   - Add Drive/Notion/Dropbox folder buttons to task cards
   - **Estimated Hours:** 2
   - **Requirements:** Requirement 2
   - **Blocked by:** Task 10.1
+  - **Status:** 🔧 修正中 - ペイロードエラー対応
+  - **Issue:** フォルダボタンクリック時に "Slack cannot handle payload" エラー
+  - **Progress:** ack()タイミング修正完了、エラーハンドリング修正中
   - **Deliverables:**
     - URL detection for Drive/Notion/Dropbox
     - 📂 button click handlers
@@ -202,7 +212,9 @@
     - 📂 buttons open URLs in new browser tabs
     - Access timestamps are logged
 
-- [ ] 10.3 Intelligent Reminder System / インテリジェントリマインダーシステム
+- [x] 10.3 Intelligent Reminder System / インテリジェントリマインダーシステム
+
+
   - Implement dual reminders: day-before 9AM + 3h before free time
   - **Estimated Hours:** 8
   - **Requirements:** Requirement 2
@@ -219,21 +231,102 @@
 
 
 
-- [ ] 10.4 Mention Inbox with AI Quick Reply / メンションinboxとAI即返信
-  - Capture mentions and provide 3-button interface with AI-generated replies
-  - **Estimated Hours:** 5
-  - **Requirements:** Requirement 2
+- [x] 10.4 AI-Powered Smart Reply System / AI駆動スマート返信システム
+  - Implement contextual message analysis and smart reply generation using GPT-4.1-mini
+  - **Estimated Hours:** 8
+  - **Requirements:** Requirement 2, Requirement 2.5
   - **Blocked by:** Task 10
+  - **Status:** ✅ 完了 - Claude Code (Opus 4) 協働完了
   - **Deliverables:**
-    - Mention detection and inbox creation
-    - 3-button ephemeral interface (Add/Ignore/Reply)
-    - AI reply generation from user's writing style
-    - 2-business-day auto-cleanup
+    - MessageAnalyzer with GPT-4.1-mini integration
+    - SmartReplyUIBuilder for contextual Block Kit generation
+    - 2-operation workflow (copy text → jump to thread)
+    - Scheduling vs. generic request classification
+    - 4-quadrant reply options with calendar integration
+    - Task creation with proper due date calculation
+    - Error handling with graceful fallbacks
   - **Acceptance Criteria:**
-    - Mentions create inbox entries with 3-button interface
-    - AI generates contextual quick replies in user's style
-    - Unprocessed items auto-delete after 2 business days
-    - Project suggestions work for task addition
+    - Message analysis completes within 5 seconds (15s timeout)
+    - Scheduling requests show calendar week links
+    - Generic requests show 4-quadrant reply options
+    - Task creation includes Slack permalink and calculated due dates
+    - Zero false positives (manual confirmation required)
+    - Graceful fallback on LLM/API failures
+    - User ID mapping with automatic user creation
+
+- [ ] 10.9 /mention Command Implementation / /mentionコマンド実装
+  - Implement /mention slash command with 72h mention history and filtering
+  - **Estimated Hours:** 6
+  - **Requirements:** Requirement 2.5 (QRMVP-JP-1.0)
+  - **Blocked by:** Task 10.4
+  - **Status:** 🆕 新規追加 - 最終仕様書対応
+  - **Deliverables:**
+    - /mention slash command handler
+    - 72h mention search functionality
+    - Filter options (unreplied/all)
+    - Mention list UI with 3-button interface
+    - Integration with existing Smart Reply System
+  - **Acceptance Criteria:**
+    - /mention shows past 72h unreplied mentions by default
+    - /mention all shows all mentions
+    - /mention unreply explicitly shows unreplied mentions
+    - Each mention has [Quick Reply] [タスク化] [既読] buttons
+    - Integrates seamlessly with Task 10.4 Smart Reply System
+    - Empty state shows helpful message
+
+- [ ] 10.10 Complete Quick Reply UI Specification / 完全クイック返信UI仕様
+  - Implement exact UI specifications from QRMVP-JP-1.0 document
+  - **Estimated Hours:** 4
+  - **Requirements:** Requirement 2.5 (QRMVP-JP-1.0)
+  - **Blocked by:** Task 10.4, Task 10.9
+  - **Status:** 🆕 新規追加 - 最終仕様書対応
+  - **Deliverables:**
+    - Exact scheduling_request UI layout per specification
+    - Exact generic_request UI layout per specification
+    - Calendar week link generation
+    - Manual text selection (no copy buttons)
+    - Proper Japanese text formatting
+  - **Acceptance Criteria:**
+    - UI matches exact specification in QRMVP-JP-1.0
+    - Calendar links open correct week view
+    - Text is selectable for manual copying
+    - No automatic copy/paste functionality
+    - All Japanese text formatting is correct
+
+- [ ] 10.11 Enhanced Due Date Calculation / 強化された期限計算
+  - Implement precise due date calculation logic from specification
+  - **Estimated Hours:** 2
+  - **Requirements:** Requirement 2.5 (QRMVP-JP-1.0)
+  - **Blocked by:** Task 10.4
+  - **Status:** 🆕 新規追加 - 最終仕様書対応
+  - **Deliverables:**
+    - calculateDue() function implementation
+    - Business day calculation (excluding weekends)
+    - Scheduling request: candidate date - 1 day at 23:59
+    - Generic request: next business day at 18:00
+    - JST timezone handling
+  - **Acceptance Criteria:**
+    - Scheduling tasks due day before proposed date at 23:59 JST
+    - Generic tasks due next business day at 18:00 JST
+    - Weekend days are properly skipped
+    - All calculations use JST timezone
+
+- [ ] 10.12 Legacy Quick Reply Removal / 旧クイック返信削除
+  - Remove old 3-button Quick Reply implementation completely
+  - **Estimated Hours:** 2
+  - **Requirements:** Requirement 2.5 (QRMVP-JP-1.0)
+  - **Blocked by:** Task 10.10
+  - **Status:** 🆕 新規追加 - 最終仕様書対応
+  - **Deliverables:**
+    - Remove old quick reply button handlers
+    - Remove old UI components
+    - Clean up unused code
+    - Update any references to old system
+  - **Acceptance Criteria:**
+    - No old quick reply buttons appear in UI
+    - All old handlers are removed
+    - Code is clean with no unused imports
+    - New system is the only quick reply implementation
 
 - [ ] 10.5 3-Tier Hierarchy Management / 3階層管理
   - Implement project hierarchy with auto-promotion

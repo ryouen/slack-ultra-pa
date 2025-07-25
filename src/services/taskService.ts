@@ -1,12 +1,15 @@
 import { logger } from '@/utils/logger';
 import { getPrismaClient } from '@/config/database';
-import { Task, InboxItem } from '@prisma/client';
+import { AIReplyService } from './aiReplyService';
+import { config } from '@/config/environment';
+import { safeJsonParse, safeJsonStringify } from '@/utils/jsonHelpers';
+import { Block, KnownBlock } from '@slack/bolt';
 
 export interface TaskCard {
   id: string;
   title: string;
   priority: 'P1' | 'P2' | 'P3';
-  badges: ('🔥' | '⚡' | '⚠️')[];
+  badges: ('[URGENT]')[];
   dueDate?: Date;
   folderUrls: string[];
   actions: string[];
@@ -46,6 +49,12 @@ export interface MessageContext {
   messageText: string;
 }
 
+export interface SmartReplyResponse {
+  type: 'scheduling_request' | 'generic_request';
+  ui: (KnownBlock | Block)[];
+  replies?: string[]; // 互換性のため
+}
+
 export interface UserStyle {
   tone: string;
   formality: string;
@@ -54,6 +63,7 @@ export interface UserStyle {
 
 export class TaskService {
   private prisma = getPrismaClient();
+  private aiReplyService: AIReplyService | null = null;
 
   /**
    * Get daily top 5 priority tasks for a user
@@ -119,7 +129,7 @@ export class TaskService {
           createdAt: {
             gte: threeDaysAgo
           },
-          status: 'PENDING'
+          status: 'PENDING' // Only show items that haven't been converted or ignored
         },
         orderBy: {
           createdAt: 'desc'
@@ -132,9 +142,9 @@ export class TaskService {
         messageText: item.messageText,
         channelId: item.channelId,
         timestamp: item.slackTs,
-        authorId: item.authorId || undefined,
-        permalink: item.permalink || undefined,
-        channelName: item.channelName || undefined
+        authorId: (item as any).authorId || undefined,
+        permalink: (item as any).permalink || undefined,
+        channelName: (item as any).channelName || undefined
       }));
     } catch (error) {
       logger.error('Failed to collect recent mentions', { error, userId });
@@ -152,10 +162,25 @@ export class TaskService {
     messageText: string;
     authorId?: string;
     userId: string;
+    permalink?: string;
+    threadTs?: string;
   }): Promise<any> {
+    // First check if inbox item already exists
+    const existingItem = await this.prisma.inboxItem.findUnique({
+      where: { slackTs: mentionData.slackTs }
+    });
+
+    if (existingItem) {
+      logger.info('Inbox item already exists for this mention', {
+        inboxItemId: existingItem.id,
+        slackTs: mentionData.slackTs
+      });
+      return existingItem;
+    }
+
     // Calculate expiration (2 business days from now)
     const expiresAt = this.calculateBusinessDaysFromNow(2);
-    
+
     const inboxItem = await this.prisma.inboxItem.create({
       data: {
         slackTs: mentionData.slackTs,
@@ -163,20 +188,22 @@ export class TaskService {
         channelName: mentionData.channelName,
         messageText: mentionData.messageText,
         authorId: mentionData.authorId,
+        permalink: mentionData.permalink,
+        threadTs: mentionData.threadTs,
         userId: mentionData.userId,
         status: 'PENDING',
         collectionType: 'MENTION',
         expiresAt
-      }
+      } as any
     });
-    
+
     logger.info('Created inbox item from mention', {
       inboxItemId: inboxItem.id,
       userId: mentionData.userId,
       channelId: mentionData.channelId,
       expiresAt
     });
-    
+
     return inboxItem;
   }
 
@@ -184,22 +211,53 @@ export class TaskService {
    * Create task from mention inbox item
    */
   async createTaskFromMention(inboxItem: any): Promise<any> {
+    // Check if already converted to task
+    if (inboxItem.status === 'CONVERTED_TO_TASK') {
+      // Find the existing task
+      const existingTask = await this.prisma.task.findFirst({
+        where: {
+          userId: inboxItem.userId,
+          description: inboxItem.messageText,
+          status: {
+            not: 'COMPLETED'
+          }
+        }
+      });
+      
+      if (existingTask) {
+        logger.info('Task already exists for this mention', {
+          taskId: existingTask.id,
+          inboxItemId: inboxItem.id
+        });
+        return existingTask;
+      }
+    }
+
     // Extract task title from message text (remove mentions and clean up)
     let title = inboxItem.messageText
       .replace(/<@[UW][A-Z0-9]+>/g, '') // Remove user mentions
       .replace(/<#[C][A-Z0-9]+\|[^>]+>/g, '') // Remove channel mentions
       .trim();
-    
+
     // Limit title length
     if (title.length > 100) {
       title = title.substring(0, 97) + '...';
     }
-    
+
     // If title is empty, use a default
     if (!title) {
-      title = `Task from #${inboxItem.channelName || inboxItem.channelId}`;
+      title = `Task from #${(inboxItem as any).channelName || inboxItem.channelId}`;
     }
-    
+
+    // Store source information as metadata
+    const sourceMetadata = {
+      channelId: inboxItem.channelId,
+      channelName: (inboxItem as any).channelName,
+      threadTs: (inboxItem as any).threadTs,
+      permalink: (inboxItem as any).permalink,
+      authorId: (inboxItem as any).authorId
+    };
+
     const task = await this.prisma.task.create({
       data: {
         title,
@@ -209,39 +267,78 @@ export class TaskService {
         priorityScore: 0,
         level: 'SUB_TASK',
         userId: inboxItem.userId,
-        folderUrls: '[]'
+        folderUrls: safeJsonStringify(sourceMetadata) // Store source info in folderUrls temporarily
       }
     });
-    
+
+    // Update inbox item status
+    await this.prisma.inboxItem.update({
+      where: { id: inboxItem.id },
+      data: { status: 'CONVERTED_TO_TASK' }
+    });
+
     // Calculate and update priority score
-    const priorityScore = this.calculatePriorityScore(task);
+    const priorityScore = this.calculatePriorityScoreSync(task);
     await this.prisma.task.update({
       where: { id: task.id },
       data: { priorityScore }
     });
-    
+
+    // Schedule reminders if this is a P1 task with due date
+    if (task.priority === 'P1' && task.dueDate) {
+      try {
+        const { ReminderService } = await import('./reminderService');
+        const reminderService = new ReminderService();
+        await reminderService.scheduleReminders(task.id);
+      } catch (error) {
+        logger.error('Failed to schedule reminders for new task', { 
+          error, 
+          taskId: task.id 
+        });
+        // Don't fail task creation if reminder scheduling fails
+      }
+    }
+
     logger.info('Created task from mention', {
       taskId: task.id,
       inboxItemId: inboxItem.id,
-      title: task.title
+      title: task.title,
+      priority: task.priority,
+      hasReminders: task.priority === 'P1' && !!task.dueDate
     });
-    
+
     return task;
   }
 
   /**
    * Generate quick reply options for a mention
+   * @deprecated Use MessageAnalyzer and SmartReplyUIBuilder directly for new Smart Reply MVP
    */
-  async generateQuickReplies(inboxItem: any): Promise<string[]> {
-    // For now, generate simple template-based replies
-    // In a real implementation, this would use AI to learn from user's writing style
+  async generateQuickReplies(inboxItem: any): Promise<SmartReplyResponse> {
+    const { MessageAnalyzer } = await import('@/llm/MessageAnalyzer');
+    const { SmartReplyUIBuilder } = await import('@/ui/SmartReplyUIBuilder');
     
-    const user = await this.prisma.user.findUnique({
-      where: { id: inboxItem.userId }
+    const analyzer = new MessageAnalyzer();
+    const uiBuilder = new SmartReplyUIBuilder();
+
+    const analysis = await analyzer.analyzeMessage(inboxItem.messageText);
+    const ui = uiBuilder.buildUI(analysis, inboxItem.messageText, {
+      originalTs: inboxItem.slackTs,
+      channelId: inboxItem.channelId
     });
     
-    const language = user?.language as 'ja' | 'en' || 'ja';
-    
+    // 互換性のため replies も生成
+    const replies = analysis.type === 'generic_request' && analysis.intent_variants
+      ? Object.values(analysis.intent_variants)
+      : ['承知いたしました', 'ありがとうございます', '確認いたします'];
+
+    return { type: analysis.type, ui, replies };
+  }
+
+  /**
+   * Get template replies as fallback
+   */
+  private getTemplateReplies(language: 'ja' | 'en'): string[] {
     if (language === 'ja') {
       return [
         'ありがとうございます。確認いたします。',
@@ -261,15 +358,8 @@ export class TaskService {
    * Complete a task
    */
   async completeTask(taskId: string): Promise<void> {
-    await this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: 'COMPLETED',
-        updatedAt: new Date()
-      }
-    });
-    
-    logger.info('Task completed', { taskId });
+    // Use onTaskCompleted which handles the update and logging
+    await this.onTaskCompleted(taskId);
   }
 
   /**
@@ -278,17 +368,17 @@ export class TaskService {
   private calculateBusinessDaysFromNow(businessDays: number): Date {
     const result = new Date();
     let daysAdded = 0;
-    
+
     while (daysAdded < businessDays) {
       result.setDate(result.getDate() + 1);
       const dayOfWeek = result.getDay();
-      
+
       // Skip weekends (0 = Sunday, 6 = Saturday)
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         daysAdded++;
       }
     }
-    
+
     return result;
   }
 
@@ -314,7 +404,7 @@ export class TaskService {
           expiresAt,
           collectionType: 'MENTION',
           userId: mention.userId
-        }
+        } as any
       });
 
       return {
@@ -322,9 +412,9 @@ export class TaskService {
         messageText: inboxItem.messageText,
         channelId: inboxItem.channelId,
         timestamp: inboxItem.slackTs,
-        authorId: inboxItem.authorId || undefined,
-        permalink: inboxItem.permalink || undefined,
-        channelName: inboxItem.channelName || undefined
+        authorId: (inboxItem as any).authorId || undefined,
+        permalink: (inboxItem as any).permalink || undefined,
+        channelName: (inboxItem as any).channelName || undefined
       };
     } catch (error) {
       logger.error('Failed to process mention', { error, mention });
@@ -356,7 +446,7 @@ export class TaskService {
     if (task.dueDate) {
       const now = new Date();
       const daysUntilDue = Math.ceil((task.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      
+
       if (daysUntilDue <= 0) {
         score += 0.4; // Overdue
       } else if (daysUntilDue <= 1) {
@@ -373,45 +463,37 @@ export class TaskService {
 
   /**
    * Suggest task hierarchy based on content
+   * @deprecated Use HierarchyService.analyzeTaskHierarchy instead
    */
   async suggestHierarchy(task: any): Promise<HierarchySuggestion> {
-    logger.info('Suggesting hierarchy', { task });
+    logger.info('Suggesting hierarchy (deprecated method)', { task });
 
-    // Simple heuristics for hierarchy suggestion
-    const title = task.title?.toLowerCase() || '';
-    const description = task.description?.toLowerCase() || '';
-    const content = `${title} ${description}`;
-
-    // Project-level keywords
-    if (content.includes('プロジェクト') || content.includes('project') || 
-        content.includes('開発') || content.includes('development')) {
-      return { level: 'PROJECT' };
-    }
-
-    // Mid-task keywords
-    if (content.includes('実装') || content.includes('implement') ||
-        content.includes('システム') || content.includes('system') ||
-        content.includes('機能') || content.includes('feature')) {
-      return { level: 'MID_TASK' };
-    }
-
-    // Default to sub-task
-    return { level: 'SUB_TASK' };
-  }
-
-  /**
-   * Generate quick reply options (placeholder)
-   */
-  async generateQuickReplies(context: MessageContext, userStyle: UserStyle): Promise<string[]> {
-    logger.info('Generating quick replies', { context, userStyle });
+    // Import hierarchy service
+    const { HierarchyService } = await import('./hierarchyService');
+    const hierarchyService = new HierarchyService();
     
-    // Simple template-based replies for now
-    return [
-      '承知しました。確認して対応いたします。',
-      'ありがとうございます。検討させていただきます。',
-      '詳細を確認して、後ほどご連絡いたします。'
-    ];
+    // Get user preferences
+    const user = await this.prisma.user.findUnique({
+      where: { id: task.userId }
+    });
+    
+    // Parse preferences to check if AI is enabled
+    const preferences = safeJsonParse(user?.preferences, {});
+    const useAI = preferences.hierarchyAI === true;
+    
+    // Use new hierarchy service
+    const result = await hierarchyService.analyzeTaskHierarchy(task, { 
+      useAI,
+      userId: task.userId 
+    });
+    
+    return {
+      level: result.level,
+      suggestedParent: result.suggestedParent
+    };
   }
+
+
 
   /**
    * Handle task completion
@@ -422,15 +504,22 @@ export class TaskService {
 
       await this.prisma.task.update({
         where: { id: taskId },
-        data: { 
+        data: {
           status: 'COMPLETED',
           updatedAt: new Date()
         }
       });
 
-      // TODO: Cancel any pending reminders for this task
+      // Cancel any pending reminders for this task
+      const { ReminderService } = await import('./reminderService');
+      const reminderService = new ReminderService();
+      await reminderService.cancelReminders(taskId);
     } catch (error) {
-      logger.error('Failed to handle task completion', { error, taskId });
+      logger.error('Failed to handle task completion', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        taskId 
+      });
       throw error;
     }
   }
@@ -444,13 +533,17 @@ export class TaskService {
 
       await this.prisma.task.update({
         where: { id: taskId },
-        data: { 
+        data: {
           reminderSent: false,
           updatedAt: new Date()
         }
       });
 
-      // TODO: Reschedule reminders for this task
+      // Cancel existing reminders and reschedule
+      const { ReminderService } = await import('./reminderService');
+      const reminderService = new ReminderService();
+      await reminderService.cancelReminders(taskId);
+      await reminderService.scheduleReminders(taskId);
     } catch (error) {
       logger.error('Failed to handle task snooze', { error, taskId });
       throw error;
@@ -458,27 +551,106 @@ export class TaskService {
   }
 
   /**
+   * Update task with folder URLs
+   */
+  async updateTaskFolderUrls(taskId: string, urls: string[]): Promise<void> {
+    try {
+      await this.prisma.task.update({
+        where: { id: taskId },
+        data: {
+          folderUrls: safeJsonStringify(urls),
+          updatedAt: new Date()
+        }
+      });
+
+      logger.info('Updated task folder URLs', { taskId, urlCount: urls.length });
+    } catch (error) {
+      logger.error('Failed to update task folder URLs', { error, taskId });
+      throw error;
+    }
+  }
+
+  /**
+   * Log folder access
+   */
+  async logFolderAccess(taskId: string, url: string, userId: string): Promise<void> {
+    try {
+      // For now, just log to console
+      // In a real implementation, this could be stored in a separate table
+      logger.info('Folder accessed', {
+        taskId,
+        url,
+        userId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to log folder access', { error, taskId, url, userId });
+    }
+  }
+
+  /**
+   * Get all pending tasks for a user
+   */
+  async getAllTasks(userId: string): Promise<TaskCard[]> {
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        userId,
+        status: 'PENDING'
+      },
+      orderBy: [
+        { priorityScore: 'desc' },
+        { createdAt: 'desc' }
+      ],
+      take: 20 // Limit to 20 tasks
+    });
+
+    return tasks.map(task => this.mapTaskToCard(task));
+  }
+
+
+  /**
+   * Get today's tasks count
+   */
+  async getTodayTasksCount(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    return await this.prisma.task.count({
+      where: {
+        userId,
+        status: 'PENDING',
+        OR: [
+          {
+            dueDate: {
+              gte: todayStart,
+              lte: todayEnd
+            }
+          },
+          {
+            priority: 'P1'
+          }
+        ]
+      }
+    });
+  }
+
+  /**
    * Map database task to TaskCard
    */
   private mapTaskToCard(task: any): TaskCard {
-    const badges: ('🔥' | '⚡' | '⚠️')[] = [];
-    
-    // Add badges based on priority and due date
-    if (task.priority === 'P1') badges.push('🔥');
-    if (task.priorityScore > 0.8) badges.push('⚡');
-    
+    const badges: ('[URGENT]')[] = [];
+
+    // Add warning badge for urgent/overdue tasks only
     if (task.dueDate) {
       const now = new Date();
       const daysUntilDue = Math.ceil((task.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysUntilDue <= 1) badges.push('⚠️');
+      if (daysUntilDue <= 1) badges.push('[URGENT]');
     }
 
-    let folderUrls: string[] = [];
-    try {
-      folderUrls = JSON.parse(task.folderUrls || '[]');
-    } catch {
-      folderUrls = [];
-    }
+    const folderUrls = safeJsonParse<string[]>(task.folderUrls, []);
 
     return {
       id: task.id,
@@ -500,17 +672,17 @@ export class TaskService {
   private getBusinessDaysAgo(days: number): Date {
     const date = new Date();
     let businessDays = 0;
-    
+
     while (businessDays < days) {
       date.setDate(date.getDate() - 1);
       const dayOfWeek = date.getDay();
-      
+
       // Skip weekends (0 = Sunday, 6 = Saturday)
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         businessDays++;
       }
     }
-    
+
     return date;
   }
 }

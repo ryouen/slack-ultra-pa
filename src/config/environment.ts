@@ -39,6 +39,12 @@ interface Config {
     logLevel: string;
     metricsPort: number;
   };
+  openai?: {
+    apiKey?: string;
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+  };
 }
 
 function validateRequiredEnvVars(): void {
@@ -61,38 +67,44 @@ validateRequiredEnvVars();
 
 export const config: Config = {
   server: {
-    port: parseInt(process.env.PORT ?? '3000', 10),
-    nodeEnv: process.env.NODE_ENV ?? 'development',
+    port: parseInt(process.env['PORT'] ?? '3000', 10),
+    nodeEnv: process.env['NODE_ENV'] ?? 'development',
   },
   slack: {
-    botToken: process.env.SLACK_BOT_TOKEN!,
-    signingSecret: process.env.SLACK_SIGNING_SECRET!,
-    socketMode: process.env.SLACK_SOCKET_MODE === 'true',
-    appToken: process.env.SLACK_APP_TOKEN,
-    clientId: process.env.SLACK_CLIENT_ID,
-    clientSecret: process.env.SLACK_CLIENT_SECRET,
-    stateSecret: process.env.SLACK_STATE_SECRET || 'my-state-secret',
-    redirectUri: process.env.SLACK_REDIRECT_URI || 'https://kind-mice-follow.loca.lt/slack/oauth/redirect',
+    botToken: process.env['SLACK_BOT_TOKEN']!,
+    signingSecret: process.env['SLACK_SIGNING_SECRET']!,
+    socketMode: process.env['SLACK_SOCKET_MODE'] === 'true',
+    appToken: process.env['SLACK_APP_TOKEN'] || undefined,
+    clientId: process.env['SLACK_CLIENT_ID'] || undefined,
+    clientSecret: process.env['SLACK_CLIENT_SECRET'] || undefined,
+    stateSecret: process.env['SLACK_STATE_SECRET'] || 'my-state-secret',
+    redirectUri: process.env['SLACK_REDIRECT_URI'] || 'https://kind-mice-follow.loca.lt/slack/oauth/redirect',
   },
   database: {
-    url: process.env.DATABASE_URL!,
+    url: process.env['DATABASE_URL']!,
   },
   redis: {
-    url: process.env.REDIS_URL!,
+    url: process.env['REDIS_URL']!,
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    clientId: process.env['GOOGLE_CLIENT_ID'] || undefined,
+    clientSecret: process.env['GOOGLE_CLIENT_SECRET'] || undefined,
   },
   notion: {
-    token: process.env.NOTION_TOKEN,
+    token: process.env['NOTION_TOKEN'] || undefined,
   },
   dropbox: {
-    clientId: process.env.DROPBOX_CLIENT_ID,
-    clientSecret: process.env.DROPBOX_CLIENT_SECRET,
+    clientId: process.env['DROPBOX_CLIENT_ID'] || undefined,
+    clientSecret: process.env['DROPBOX_CLIENT_SECRET'] || undefined,
   },
   observability: {
-    logLevel: process.env.LOG_LEVEL ?? 'info',
-    metricsPort: parseInt(process.env.METRICS_PORT ?? '9091', 10),
+    logLevel: process.env['LOG_LEVEL'] ?? 'info',
+    metricsPort: parseInt(process.env['METRICS_PORT'] ?? '9091', 10),
   },
+  openai: process.env['OPENAI_API_KEY'] ? {
+    apiKey: process.env['OPENAI_API_KEY'],
+    model: process.env['OPENAI_MODEL'] ?? 'gpt-4-turbo-preview',
+    maxTokens: parseInt(process.env['OPENAI_MAX_TOKENS'] ?? '300', 10),
+    temperature: parseFloat(process.env['OPENAI_TEMPERATURE'] ?? '0.7'),
+  } : undefined,
 };

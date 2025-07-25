@@ -1,0 +1,20 @@
+# ngrok configuration for Slack development
+version: "2"
+authtoken: # Add your ngrok authtoken here
+
+tunnels:
+  slack-dev:
+    proto: http
+    addr: 3000
+    subdomain: clear-regions-follow  # Requires ngrok Pro
+    # For free tier, remove subdomain line
+    inspect: true
+    bind_tls: true
+
+# Alternative free configuration
+# tunnels:
+#   slack-dev:
+#     proto: http
+#     addr: 3001
+#     inspect: true
+#     bind_tls: true

@@ -1,45 +1,40 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model SlackInstallation {
-  id          String    @id @default(cuid())
-  teamId      String?
+  id           String   @id @default(cuid())
+  teamId       String?
   enterpriseId String?
-  installData String    // JSON stringified installation data
-  botToken    String?
-  botId       String?
-  botUserId   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  installData  String
+  botToken     String?
+  botId        String?
+  botUserId    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   @@unique([teamId, enterpriseId])
   @@map("slack_installations")
 }
 
 model User {
-  id          String   @id @default(cuid())
-  slackUserId String   @unique
-  timezone    String   @default("UTC")
-  language    String   @default("ja")
-  preferences String   @default("{}")
-  
-  tasks         Task[]
-  inboxItems    InboxItem[]
+  id            String         @id @default(cuid())
+  slackUserId   String         @unique
+  timezone      String         @default("UTC")
+  language      String         @default("ja")
+  preferences   String         @default("{}")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   focusSessions FocusSession[]
+  inboxItems    InboxItem[]
   oauthTokens   OAuthToken[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  tasks         Task[]
+
   @@map("users")
 }
 
@@ -50,96 +45,83 @@ model Task {
   status        String    @default("PENDING")
   priority      String    @default("P2")
   priorityScore Float     @default(0)
-  
-  // 3-Tier Hierarchy / 3階層
   level         String    @default("SUB_TASK")
-  parentId      String?
-  parent        Task?     @relation("TaskHierarchy", fields: [parentId], references: [id])
-  children      Task[]    @relation("TaskHierarchy")
-  
-  // Folder Integration / フォルダ統合
-  folderUrls    String    @default("[]")
-  
-  // Scheduling / スケジューリング
-  dueDate       DateTime?
-  reminderSent  Boolean   @default(false)
-  
+  parentId       String?
+  folderUrls     String    @default("[]")
+  slackPermalink String?   @db.VarChar(1024)
+  dueDate        DateTime?
+  reminderSent   Boolean   @default(false)
   userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  
+  parent        Task?     @relation("TaskHierarchy", fields: [parentId], references: [id])
+  children      Task[]    @relation("TaskHierarchy")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("tasks")
 }
 
 model InboxItem {
-  id          String   @id @default(cuid())
-  slackTs     String   @unique
-  channelId   String
-  messageText String
-  status      String   @default("PENDING")
+  id             String   @id @default(cuid())
+  slackTs        String   @unique
+  channelId      String
+  messageText    String
+  status         String   @default("PENDING")
+  authorId       String?
+  threadTs       String?
+  permalink      String?
+  channelName    String?
+  expiresAt      DateTime
+  collectionType String   @default("MENTION")
+  userId         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   
-  // Message metadata / メッセージメタデータ
-  authorId    String?  // Slack user ID of message author
-  threadTs    String?  // Thread timestamp if in thread
-  permalink   String?  // Slack permalink to message
-  channelName String?  // Channel name for display
+  // New fields for mention-centric workflow
+  hasReplied     Boolean  @default(false)
+  replyCount     Int      @default(0)
+  lastReplyTs    String?
+  isTaskCreated  Boolean  @default(false)
+  taskId         String?
+  importance     String   @default("medium") // high/medium/low
   
-  // Auto-cleanup / 自動クリーンアップ
-  expiresAt   DateTime
-  
-  // Collection metadata / 収集メタデータ
-  collectionType String @default("MENTION") // MENTION, AUTO_COLLECTED
-  
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, hasReplied]) // For unread filter
   @@map("inbox_items")
 }
 
 model CalendarEvent {
-  id          String   @id @default(cuid())
-  googleId    String?  @unique
-  title       String
-  startTime   DateTime
-  endTime     DateTime
-  status      String   @default("TENTATIVE")
-  
-  // Tentative Naming / 仮予定命名
+  id             String   @id @default(cuid())
+  googleId       String?  @unique
+  title          String
+  startTime      DateTime
+  endTime        DateTime
+  status         String   @default("TENTATIVE")
   sequenceNumber Int?
   totalInGroup   Int?
-  
-  userId      String
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  userId         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@map("calendar_events")
 }
 
 model OAuthToken {
   id           String    @id @default(cuid())
-  provider     String    // GOOGLE_CALENDAR, GOOGLE_DRIVE, GMAIL, NOTION, DROPBOX
+  provider     String
   accessToken  String
   refreshToken String?
   expiresAt    DateTime?
   scope        String    @default("")
-  
-  // Token metadata / トークンメタデータ
   tokenType    String    @default("Bearer")
   lastRefresh  DateTime?
   isValid      Boolean   @default(true)
-  
   userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, provider])
   @@map("oauth_tokens")
 }
@@ -152,36 +134,22 @@ model JobQueue {
   status      String   @default("PENDING")
   attempts    Int      @default(0)
   maxAttempts Int      @default(3)
-  
   userId      String?
-  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   @@map("job_queue")
 }
 
 model FocusSession {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   startTime DateTime
   endTime   DateTime?
-  duration  Int      // in minutes
-  
+  duration  Int
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("focus_sessions")
 }
-
-// SQLite doesn't support enums, so we use string constants
-// TaskStatus: "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
-// Priority: "P1", "P2", "P3"
-// TaskLevel: "PROJECT", "MID_TASK", "SUB_TASK"
-// InboxStatus: "PENDING", "CONVERTED_TO_TASK", "IGNORED", "QUICK_REPLIED"
-// EventStatus: "TENTATIVE", "CONFIRMED", "CANCELLED"
-// Provider: "GOOGLE_CALENDAR", "GOOGLE_DRIVE", "GMAIL", "NOTION", "DROPBOX"
-// JobType: "REMINDER", "DAILY_REPORT", "WEEKLY_REPORT", "FILE_SUMMARY"
-// JobStatus: "PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"

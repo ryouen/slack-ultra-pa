@@ -29,7 +29,7 @@ This document outlines the requirements for a Slack-centered personal assistant 
 
 | 価値メッセージ / Value Message | 対応機能 / Corresponding Features | 効果 / Impact |
 |---|---|---|
-| **1. "探さない・思い出さない" / "No Searching, No Remembering"** | • 朝7:30 / /todo today で🔥優先タスクTop5カード<br>• 📂ボタンで Drive/Notion/Dropbox を即オープン<br>• 資料タスク → 直近30日ファイル自動サマリ | 助走をなくし、準備ゼロ秒で仕事を開始<br>Eliminate preparation time, start work in zero seconds |
+| **1. "探さない・思い出さない" / "No Searching, No Remembering"** | • 朝7:30 / /todo today で優先タスクTop5カード<br>• 📂ボタンで Drive/Notion/Dropbox を即オープン<br>• 資料タスク → 直近30日ファイル自動サマリ | 助走をなくし、準備ゼロ秒で仕事を開始<br>Eliminate preparation time, start work in zero seconds |
 | **2. "考える前に提示" / "Proactive Suggestions"** | • P1タスク：前日09:00＋空き3h前にDMリマインド<br>• 会議30分前 /prep → 過去議事・関連資料DM | ユーザーは"通知を見て即行動"するだけ<br>Users just see notifications and take immediate action |
 | **3. "日程調整の摩擦ゼロ" / "Frictionless Scheduling"** | • 🗓 Open in Calendar→候補リスト（✅❌✈️🚶⚠️）<br>• 時間枠クリックで週ビュー直行<br>• 📅仮予定挿入（連番）＋👍返信下書き | 「カレンダー開く→空き探す」の手間を統合<br>Integrate "open calendar → find availability" workflow |
 | **4. "チャット＝秘書室" / "Chat as Secretary Office"** | • メンション自動インボックス＋3ボタン（＋タスク追加）<br>• Quick Reply 3候補下書き（ユーザー文体学習）<br>• Daily/Weekly レポートを指定チャンネルに自動投稿 | UIの重心を完全にSlack側に固定<br>Keep UI center of gravity entirely on Slack side |
@@ -65,14 +65,20 @@ This document outlines the requirements for a Slack-centered personal assistant 
 ユーザーとして、メンションを取り込み、タスクを階層的に整理し、プロアクティブな支援を提供するインテリジェントなタスク管理システムを求め、タスク管理ではなく実行に集中したい。
 
 #### Acceptance Criteria / 受け入れ基準
-1. **GIVEN** it's 7:30 AM or user executes /todo today **WHEN** the command is triggered **THEN** the system SHALL display top 5 priority tasks as cards with 🔥⚡ badges, due dates, 📂 folder buttons, ⚠️ for urgent/overdue tasks, and ✅ completion buttons
-   **前提条件** 朝7:30または/todo todayコマンド実行 **条件** トリガーされた時 **結果** システムは🔥⚡バッジ、期限、📂フォルダボタン、緊急/期限切れタスクの⚠️、✅完了ボタン付きの優先タスクTop5をカード表示する
+1. **GIVEN** it's 7:30 AM or user executes /todo today **WHEN** the command is triggered **THEN** the system SHALL display top 5 priority tasks as cards with due dates, 📂 folder buttons, ⚠️ for urgent/overdue tasks, and ✅ completion buttons
+   **前提条件** 朝7:30または/todo todayコマンド実行 **条件** トリガーされた時 **結果** システムは期限、📂フォルダボタン、緊急/期限切れタスクの⚠️、✅完了ボタン付きの優先タスクTop5をカード表示する
 2. **GIVEN** a task has associated folder URLs (Drive/Notion/Dropbox) **WHEN** 📂 button is clicked **THEN** the system SHALL open the URL in a new browser tab and log the access timestamp
    **前提条件** タスクに関連フォルダURL（Drive/Notion/Dropbox）がある **条件** 📂ボタンがクリックされた時 **結果** システムは新しいブラウザタブでURLを開きアクセスタイムスタンプを記録する
 3. **GIVEN** a P1 priority task exists **WHEN** it's 9:00 AM the day before due date OR 3 hours before user's first unscheduled consecutive 3+ hour slot detected by FreeBusy API **THEN** the system SHALL send DM reminders and stop when task is completed or snoozed
    **前提条件** P1優先度タスクが存在する **条件** 期限前日9:00またはFreeBusy APIで検出される未スケジュール連続3時間以上の最初のスロットの3時間前 **結果** システムはDMリマインダーを送信し、タスク完了またはスヌーズで停止する
-4. **GIVEN** user is mentioned in a message **WHEN** the mention is detected **THEN** the system SHALL create an inbox entry and show ephemeral 3-button interface: ＋Add Task, ✕Ignore, ⚡Quick Reply with AI-generated response options
-   **前提条件** ユーザーがメッセージでメンションされる **条件** メンションが検出された時 **結果** システムはinboxエントリを作成し、AI生成返信選択肢付きの3ボタン（＋タスク追加、✕無視、⚡即返信）をエフェメラル表示する
+4. **GIVEN** user is mentioned in a message **WHEN** the mention is detected **THEN** the system SHALL analyze message content using GPT-4.1-mini and display contextual smart reply interface with 2-operation workflow (copy text → jump to thread)
+   **前提条件** ユーザーがメッセージでメンションされる **条件** メンションが検出された時 **結果** システムはGPT-4.1-miniを使用してメッセージ内容を分析し、2操作ワークフロー（テキストコピー→スレッドジャンプ）でコンテキスト対応スマート返信インターフェースを表示する
+4.1. **GIVEN** message is classified as scheduling_request **WHEN** analysis is complete **THEN** the system SHALL display calendar week link and 4-quadrant reply options (polite/casual × agree/reject) with task addition capability
+   **前提条件** メッセージがscheduling_requestに分類される **条件** 分析が完了した時 **結果** システムはカレンダー週リンクと4象限返信選択肢（丁寧/カジュアル × 同意/拒否）をタスク追加機能付きで表示する
+4.2. **GIVEN** message is classified as generic_request **WHEN** analysis is complete **THEN** the system SHALL generate contextual reply variants based on intent analysis and display with task addition capability
+   **前提条件** メッセージがgeneric_requestに分類される **条件** 分析が完了した時 **結果** システムは意図分析に基づいてコンテキスト返信バリエーションを生成し、タスク追加機能付きで表示する
+4.3. **GIVEN** LLM analysis fails or times out (>15 seconds) **WHEN** error occurs **THEN** the system SHALL fallback to generic template responses and display user-friendly error message
+   **前提条件** LLM分析が失敗またはタイムアウト（15秒超過） **条件** エラーが発生した時 **結果** システムは汎用テンプレート応答にフォールバックし、ユーザーフレンドリーなエラーメッセージを表示する
 4.1. **GIVEN** user executes `/todo today` and has no active tasks **WHEN** the command is processed **THEN** the system SHALL automatically collect mentions from the past 3 business days (Monday-Friday, excluding weekends) and display them as inbox entries with the same 3-button interface
    **前提条件** ユーザーが`/todo today`を実行し、アクティブなタスクがない **条件** コマンドが処理された時 **結果** システムは過去3営業日（月-金曜日、土日を除く）のメンションを自動収集し、同じ3ボタンインターフェースでinboxエントリとして表示する
 5. **GIVEN** inbox items remain unprocessed **WHEN** 2 business days (Monday-Friday, 48 hours elapsed excluding weekends) have passed **THEN** the system SHALL automatically delete the inbox entry and log the action to user's DM
@@ -89,6 +95,167 @@ This document outlines the requirements for a Slack-centered personal assistant 
    **前提条件** 日次/週次レポートがスケジュールされている **条件** 毎日8:00または月曜8:00 **結果** システムは進捗レポート（完了/残/新規タスク）を生成し指定チャンネルに送信する
 10. **GIVEN** user completes a task or uses quick reply **WHEN** response is needed **THEN** the system SHALL learn from user's recent 100 messages and generate 3 draft reply options in user's writing style, inserting them into the message input field without auto-sending
     **前提条件** ユーザーがタスク完了または即返信を使用 **条件** 返信が必要な時 **結果** システムはユーザーの直近100メッセージから学習し、自動送信せずにメッセージ入力欄にユーザーの文体で3つの返信下書き選択肢を挿入する
+
+### Requirement 2.5: Quick Reply & /mention MVP System / Quick Reply & /mention MVPシステム
+**Score: Impact(5) + Effort(3) + Differentiation(5) + Demo(5) = 18**
+<!-- Impact: 最高 - 返信時間を30秒→5秒に短縮、最短2操作で返信完了 | Effort: 中程度 - OpenAI API統合 | Differentiation: 最高 - 誤爆ゼロ設計とメンション中心ワークフロー | Demo: 最高 - 視覚的で分かりやすい効率化 -->
+
+**User Story / ユーザーストーリー:** As a user, I want to manage my mentions efficiently with AI-powered contextual reply suggestions and task creation, so that I can respond in just 2 operations (copy text → jump to thread) with zero false positives.
+ユーザーとして、AI駆動のコンテキスト返信提案とタスク作成でメンションを効率的に管理し、誤爆ゼロで最短2操作（テキストコピー→スレッドジャンプ）で応答したい。
+
+#### Core Concept / コアコンセプト
+- **最短2操作で返信**: ①返信文をコピー ②「スレッドへ」ジャンプ
+- **誤爆ゼロ**: AIは送らない・貼らない・自動コピーしない
+- **メンション中心の仕事整理**: /mention一覧 → Quick Reply or タスク化
+
+#### Complete Specification Reference / 完全仕様参照
+**📦 Slack Personal Assistant ― Quick Reply & /mention MVP 完全仕様(2025‑07 最終確定版 / 書類番号 QRMVP‑JP‑1.0)**
+
+**0. ゴール & コンセプト**
+- **最短2操作で返信**: ①返信文をコピー ②「スレッドへ」ジャンプ
+- **誤爆ゼロ**: AIは送らない・貼らない・自動コピーしない
+- **メンション中心の仕事整理**: /mention一覧 → Quick Reply or タスク化
+
+**1. ユーザーストーリー**
+山田さん（BizDev / 日程調整・確認依頼が多い）
+- 朝 /mention → 過去72hの未返信メンション一覧が出る
+- 「明日のデモ大丈夫？」 → [Quick Reply] → 4つの返信案を読み、丁寧OKをコピー
+- [スレッドへ]ボタンでジャンプ → 送信
+- 次メンションは資料確認依頼 → [タスク化]ボタン → /todoに「資料確認」が追加
+
+**2. コマンド仕様**
+- `/mention`: 直近72hのメンション一覧
+- `/mention all`: 全件表示
+- `/mention unreply`: 未返信のみ
+
+#### Acceptance Criteria / 受け入れ基準
+1. **GIVEN** user executes /mention command **WHEN** command is triggered **THEN** the system SHALL display past 72h unreplied mentions with [Quick Reply] [タスク化] [既読] buttons for each mention
+   **前提条件** ユーザーが/mentionコマンドを実行 **条件** コマンドがトリガーされた時 **結果** システムは過去72時間の未返信メンションを各メンションに[Quick Reply] [タスク化] [既読]ボタン付きで表示する
+
+2. **GIVEN** user clicks [Quick Reply] on scheduling message **WHEN** message is analyzed **THEN** the system SHALL display scheduling_request UI with calendar week link and 4-quadrant reply options (丁寧/カジュアル × OK/NG) within 5 seconds
+   **前提条件** ユーザーがスケジュールメッセージの[Quick Reply]をクリック **条件** メッセージが分析された時 **結果** システムは5秒以内にカレンダー週リンクと4象限返信選択肢（丁寧/カジュアル × OK/NG）付きのscheduling_request UIを表示する
+
+3. **GIVEN** user clicks [Quick Reply] on generic message **WHEN** message is analyzed **THEN** the system SHALL display generic_request UI with 4 reply variants (了解/難しい × 丁寧/カジュアル) and manual text selection for copying
+   **前提条件** ユーザーが一般メッセージの[Quick Reply]をクリック **条件** メッセージが分析された時 **結果** システムは4つの返信バリエーション（了解/難しい × 丁寧/カジュアル）と手動テキスト選択によるコピー機能付きのgeneric_request UIを表示する
+
+4. **GIVEN** smart reply interface is displayed **WHEN** user selects reply text and clicks [スレッドへ] **THEN** the system SHALL open thread permalink in new tab/window for immediate manual pasting and sending
+   **前提条件** スマート返信インターフェースが表示される **条件** ユーザーが返信テキストを選択し[スレッドへ]をクリック **結果** システムは即座の手動貼り付けと送信のため新しいタブ/ウィンドウでスレッドパーマリンクを開く
+
+5. **GIVEN** user clicks [タスク化] **WHEN** action is triggered **THEN** the system SHALL create task with calculated due date (scheduling: 候補日前日23:59, generic: 翌営業日18:00), include Slack permalink, and confirm creation
+   **前提条件** ユーザーが[タスク化]をクリック **条件** アクションがトリガーされる **結果** システムは計算された期限（スケジューリング：候補日前日23:59、一般：翌営業日18:00）でタスクを作成し、Slackパーマリンクを含め、作成を確認する
+
+6. **GIVEN** GPT-4.1-mini analysis fails or exceeds 15-second timeout **WHEN** analysis is attempted **THEN** the system SHALL fallback to generic_request with predefined 4 reply templates and display user-friendly error message
+   **前提条件** GPT-4.1-mini分析が失敗または15秒タイムアウト超過 **条件** 分析が試行される **結果** システムは事前定義された4つの返信テンプレート付きgeneric_requestにフォールバックし、ユーザーフレンドリーなエラーメッセージを表示する
+
+7. **GIVEN** system processes mention **WHEN** user mapping is required **THEN** the system SHALL automatically resolve Slack User ID to internal User ID via upsert, creating new user record with default settings (timezone: Asia/Tokyo, language: ja)
+   **前提条件** システムがメンションを処理 **条件** ユーザーマッピングが必要 **結果** システムはupsertによりSlackユーザーIDを内部ユーザーIDに自動解決し、デフォルト設定（タイムゾーン：Asia/Tokyo、言語：ja）で新しいユーザーレコードを作成する
+
+8. **GIVEN** /mention command variations **WHEN** user specifies options **THEN** the system SHALL support /mention (default: unreplied), /mention all (all mentions), /mention unreply (explicit unreplied filter)
+   **前提条件** /mentionコマンドのバリエーション **条件** ユーザーがオプションを指定 **結果** システムは/mention（デフォルト：未返信）、/mention all（全メンション）、/mention unreply（明示的未返信フィルター）をサポートする
+
+#### Technical Specifications / 技術仕様
+- **Framework**: @slack/bolt (Node.js)
+- **DB**: PostgreSQL + Prisma
+- **LLM**: OpenAI GPT-4.1-mini, temperature 0.2, 15秒タイムアウト
+- **OAuth**: Bot Token + User Token (channels:history, groups:history, search:read)
+- **BOT_USER_ID**: 起動時auth.test()で1度取得
+
+#### Block UI Specifications / Block UI仕様
+
+**4.1 scheduling_request UI**
+```
+📩 *日程調整メッセージを検出しました*
+> …メッセージ抜粋…
+📅 [該当週カレンダーを開く](GCal週URL)
+
+🟢 日程OK（丁寧）
+> 10月11日午前でしたら大丈夫です。よろしくお願いいたします。
+
+🟢 日程OK（カジュアル）
+> 11日午前いけます！
+
+🔴 日程NG（丁寧）
+> 申し訳ありません、その日は難しそうです。
+> ◯月◯日◯時〜、または◯月◯日◯時〜ではいかがでしょうか。
+
+🔴 日程NG（カジュアル）
+> ごめん、その日は厳しいかも！また別日で調整してもらえる？
+
+**返信する場合は、上記メッセージ案をコピーし、下記ボタンでスレッドへ飛んでください。**
+
+📌 操作:
+[ タスクとして追加 ] [ スレッドへ ]
+```
+
+**4.2 generic_request UI**
+```
+📩 *依頼 / 確認メッセージを検出しました*
+> …メッセージ抜粋…
+
+🟢 了解（丁寧）
+> 承知いたしました。確認してお戻しいたします。
+
+🟢 了解（カジュアル）
+> わかったー！確認するね。
+
+🔴 難しい / 要調整（丁寧）
+> 恐れ入ります、すぐには対応が難しい状況です。少しお時間いただけますでしょうか。
+
+🔴 難しい / 要調整（カジュアル）
+> ごめん、ちょっと難しいかも！
+
+**返信する場合は、上記メッセージ案をコピーし、下記ボタンでスレッドへ飛んでください。**
+
+📌 操作:
+[ タスクとして追加 ] [ スレッドで返信する ]
+```
+
+#### LLM Interface / LLMインターフェース
+**入力**
+```json
+{ "message_text": "<Slack message>" }
+```
+
+**出力**
+```json
+{
+  "type": "scheduling_request" | "generic_request",
+  "dates": [{"date": "YYYY-MM-DD", "part_of_day": "morning"}],
+  "intent_variants": {
+    "agree_polite": "…", "agree_casual": "…",
+    "reject_polite": "…", "reject_casual": "…"
+  }
+}
+```
+
+#### Task保存仕様
+- **title**: UIボタンに埋め込んだtitle
+- **slackPermalink**: chat.getPermalink()で取得
+- **dueDate**: 
+  - scheduling → 候補日前日23:59
+  - generic → 翌営業日18:00
+- **userId**: Userテーブル(slackUserIdでupsert)
+
+#### 期限ロジック
+```javascript
+function calculateDue(type, dates?) {
+  if (type==='scheduling_request' && dates?.length) {
+    const d = new Date(dates[0].date);
+    d.setDate(d.getDate()-1);
+    d.setHours(23,59,0,0);
+    return d;
+  }
+  const next = getNextBusinessDay(new Date());
+  next.setHours(18,0,0,0);
+  return next;
+}
+```
+
+#### 禁止・注意事項
+- 返信文を送信する「Submit」ボタンや自動送信動作を絶対に追加しない
+- コピー自動化（clipboard.js等）は使用禁止
+- LLM出力のフリーテキストはUIに直接表示しない（必ずテンプレ内に埋め込む）
+- 旧3ボタン実装は完全削除
 
 ### Requirement 3: Smart Calendar Integration / スマートカレンダー統合
 **Score: Impact(5) + Effort(4) + Differentiation(4) + Demo(4) = 17**
@@ -207,6 +374,9 @@ This document outlines the requirements for a Slack-centered personal assistant 
 
 ### Slash Commands / スラッシュコマンド一覧
 - `/todo today` - Display top 5 priority tasks / 優先タスクTop5を表示
+- `/mention` - Display past 72h unreplied mentions / 過去72時間の未返信メンション表示
+- `/mention all` - Display all mentions / 全メンション表示
+- `/mention unreply` - Display unreplied mentions explicitly / 未返信メンション明示表示
 - `/focus on [duration]` - Enable focus mode / 集中モードを有効化
 - `/lang [en|ja]` - Switch language preference / 言語設定を切り替え
 - `/prep [eventID]` - Prepare meeting materials / 会議資料を準備

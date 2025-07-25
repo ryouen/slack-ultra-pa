@@ -5,7 +5,7 @@ export interface TaskCard {
   id: string;
   title: string;
   priority: 'P1' | 'P2' | 'P3';
-  badges: ('🔥' | '⚡' | '⚠️')[];
+  badges: ('[HOT]' | '[QUICK]' | '[URGENT]')[];
   dueDate?: Date;
   folderUrls: FolderUrl[];
   actions: TaskAction[];
@@ -27,7 +27,7 @@ export interface DateTimeCandidate {
   startTime: Date;
   endTime: Date;
   status: 'free' | 'busy';
-  indicators: ('✈️' | '🚶' | '⚠️')[];
+  indicators: ('[TRAVEL]' | '[WALK]' | '[WARNING]')[];
   confidence: number;
 }
 
@@ -96,7 +96,7 @@ export interface HierarchySuggestion {
   level: 'PROJECT' | 'MID_TASK' | 'SUB_TASK';
   suggestedParent?: string;
   suggestedChildren?: string[];
-  confidence: number;
+  confidence?: number;
 }
 
 export interface FileResult {

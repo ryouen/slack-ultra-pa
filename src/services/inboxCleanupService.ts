@@ -3,6 +3,7 @@ import { getPrismaClient } from '@/config/database';
 
 export class InboxCleanupService {
   private prisma = getPrismaClient();
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   /**
    * Clean up expired inbox items (2 business days old)
@@ -63,8 +64,11 @@ export class InboxCleanupService {
    * Schedule cleanup to run periodically
    */
   scheduleCleanup(): void {
+    // Clear any existing interval
+    this.stopCleanup();
+    
     // Run cleanup every hour
-    setInterval(async () => {
+    this.cleanupInterval = setInterval(async () => {
       try {
         await this.cleanupExpiredInboxItems();
       } catch (error) {
@@ -72,6 +76,22 @@ export class InboxCleanupService {
       }
     }, 60 * 60 * 1000); // 1 hour
 
+    // Run initial cleanup
+    this.cleanupExpiredInboxItems().catch(error => {
+      logger.error('Initial cleanup failed', { error });
+    });
+
     logger.info('Inbox cleanup scheduler started');
+  }
+
+  /**
+   * Stop the cleanup scheduler
+   */
+  stopCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      logger.info('Inbox cleanup scheduler stopped');
+    }
   }
 }

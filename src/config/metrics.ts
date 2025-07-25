@@ -54,6 +54,12 @@ export const externalApiRequestDuration = new Histogram({
  * Initialize metrics collection and HTTP endpoint
  */
 export function initializeMetrics(): void {
+  // Skip metrics server if port is 0
+  if (config.observability.metricsPort === 0) {
+    logger.info('Metrics server disabled (port set to 0)');
+    return;
+  }
+
   const metricsApp = express();
 
   // Metrics endpoint
