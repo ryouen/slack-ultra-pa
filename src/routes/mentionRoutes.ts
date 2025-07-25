@@ -5,6 +5,7 @@ import { TaskService } from '@/services/taskService';
 import { getPrismaClient } from '@/config/database';
 import { getSlackLanguage } from '@/utils/slackHelpers';
 import { getChannelId, getUserId } from '@/utils/getChannelId';
+import { sendReply } from '@/utils/sendReply';
 
 export function registerMentionRoutes(app: App): void {
   const prisma = getPrismaClient();
@@ -229,10 +230,8 @@ function registerMentionActions(app: App) {
         channelId: mention.channelId
       });
 
-      // Send Smart Reply UI (ephemeral messages must be sent to the channel where the action occurred)
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: userId,
+      // Send Smart Reply UI (handles both channel and DM)
+      await sendReply(client, getChannelId(body), userId, {
         blocks,
         text: 'Quick Reply オプション'
       });
@@ -241,9 +240,7 @@ function registerMentionActions(app: App) {
       logger.error('Error generating smart reply', { error });
       
       // Fallback error message
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: '⚠️ 返信案の生成に失敗しました。'
       });
     }
@@ -267,9 +264,7 @@ function registerMentionActions(app: App) {
       const language = user?.language as 'ja' | 'en' || 'ja';
 
       // Update message
-      await client.chat.postEphemeral({
-        channel: getUserId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: language === 'ja'
           ? `[OK] タスクを作成しました`
           : `[OK] Task created`
@@ -298,9 +293,7 @@ function registerMentionActions(app: App) {
       const language = user?.language as 'ja' | 'en' || 'ja';
 
       // Update message
-      await client.chat.postEphemeral({
-        channel: getUserId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: language === 'ja'
           ? `[OK] 既読にしました`
           : `[OK] Marked as read`

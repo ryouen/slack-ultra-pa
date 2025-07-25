@@ -4,6 +4,7 @@ import { SmartReplyUIBuilder } from '@/ui/SmartReplyUIBuilder';
 import { getPrismaClient } from '@/config/database';
 import { logger } from '@/utils/logger';
 import { getChannelId, getUserId } from '@/utils/getChannelId';
+import { sendReply } from '@/utils/sendReply';
 
 export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
   const messageAnalyzer = new MessageAnalyzer();
@@ -131,10 +132,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
           channelId: event.channel
         });
 
-        // メンションされたユーザーにエフェメラル送信
-        await client.chat.postEphemeral({
-          channel: event.channel,
-          user: mentionedUserId,
+        // メンションされたユーザーに送信（チャンネル/DM対応）
+        await sendReply(client, event.channel, mentionedUserId, {
           blocks,
           text: 'Quick Reply オプション' // フォールバック
         });
@@ -193,9 +192,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         }
       });
 
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: `📝 タスクを追加しました：「${meta.title}」`
       });
 
@@ -207,9 +204,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
     } catch (error) {
       logger.error('Task creation error:', error);
       
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: '⚠️ タスクの追加に失敗しました。後ほどもう一度お試しください。'
       });
     }
@@ -236,10 +231,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         channelId: event.channel
       });
 
-      // エフェメラル送信
-      await client.chat.postEphemeral({
-        channel: event.channel,
-        user: event.user,
+      // 送信（チャンネル/DM対応）
+      await sendReply(client, event.channel, event.user, {
         blocks,
         text: 'Quick Reply オプション' // フォールバック
       });
@@ -251,9 +244,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
       
       // エラー時のフォールバック
       try {
-        await client.chat.postEphemeral({
-          channel: event.channel,
-          user: event.user,
+        await sendReply(client, event.channel, event.user, {
           text: '⚠️ 一時的に返信案を生成できませんでした。後ほどもう一度お試しください。'
         });
       } catch (fallbackError) {
@@ -275,9 +266,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         // 旧形式の場合はチャンネルリンクを提供
         const channelLink = `slack://channel?team=${typedBody.team.id}&id=${typedBody.channel.id}`;
         
-        await client.chat.postEphemeral({
-          channel: getChannelId(body),
-          user: getUserId(body),
+        await sendReply(client, getChannelId(body), getUserId(body), {
           blocks: [{
             type: 'section',
             text: { type: 'mrkdwn', text: '🔗 チャンネルに移動:' },
@@ -286,7 +275,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
               text: { type: 'plain_text', text: 'チャンネルを開く' },
               url: channelLink
             }
-          }]
+          }],
+          text: '🔗 チャンネルに移動'
         });
         
         logger.info('Channel link generated (fallback)', { channelLink });
@@ -302,9 +292,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         message_ts: originalTs
       });
 
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         blocks: [{
           type: 'section',
           text: { type: 'mrkdwn', text: '🔗 元のメッセージに移動:' },
@@ -313,7 +301,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
             text: { type: 'plain_text', text: 'スレッドを開く' },
             url: permalinkResult.permalink
           }
-        }]
+        }],
+        text: '🔗 元のメッセージに移動'
       });
 
       logger.info('Thread permalink generated', { 
@@ -325,9 +314,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
     } catch (error) {
       logger.error('Thread jump error:', error);
       
-      await client.chat.postEphemeral({
-        channel: getChannelId(body),
-        user: getUserId(body),
+      await sendReply(client, getChannelId(body), getUserId(body), {
         text: '❌ スレッドへのリンク生成に失敗しました。'
       });
     }

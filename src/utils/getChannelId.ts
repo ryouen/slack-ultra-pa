@@ -1,16 +1,16 @@
 /**
  * Get channel ID from Slack interaction body
- * Handles both channel messages and DMs properly
+ * Returns undefined for DMs to handle them separately
  */
-export function getChannelId(body: any): string {
+export function getChannelId(body: any): string | undefined {
   // For actions from ephemeral messages, channel might be in container
   if (body.container?.channel_id) {
     return body.container.channel_id;
   }
   
-  // For DMs, channel might not exist in body.channel
-  // In that case, use the user ID as channel ID
-  return body.channel?.id || body.user?.id || body.user_id;
+  // For regular messages/commands
+  return body.channel?.id;
+  // Note: Returns undefined for DMs - caller should handle this case
 }
 
 /**
