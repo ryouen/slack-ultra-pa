@@ -51,15 +51,35 @@
 
 ## 📌 現在の状況（2025-07-26更新）
 
+### 🧪 OAuth Phase 1テスト実行中
+- **o3-proによるテスト計画**: 段階的OAuth移行のための包括的テスト
+- **進捗**: A-1テスト完了、A-2テスト実装修正中
+- **アドバイスAIからの最新指摘**: 
+  - Bolt v3制約（clientId/clientSecret/installationStoreとauthorizeの排他性）は理解済み
+  - ポート3000統合アプローチを採用（ngrok URL変更回避のため）
+  - 追加のチェックポイントを確認中
+
+#### テスト進捗状況
+| テスト | 状態 | 詳細 |
+|--------|------|------|
+| A-1: 既存Botトークン | ✅ 完了 | `/todo`コマンドが環境変数トークンで正常動作 |
+| A-2: OAuth新ワークスペース | 🔧 実装中 | ポート3000統合済み、最終確認前 |
+| A-3: 共存動作(Canary) | ⏳ 待機 | 環境変数とOAuthトークンの共存テスト |
+| A-4: トークン無効化 | ⏳ 待機 | Bot削除→エラー確認→再インストール |
+
 ### 直近の作業内容
+- **OAuth実装の修正と統合**
+  - ExpressReceiver設定の簡素化（src/app.ts:52-66行目）
+  - oauthIntegration.tsでInstallProviderを独立実装
+  - authorizeとOAuth installerの競合解決
+  - **ngrok転送先問題の解決**: OAuthルートをポート3000のExpressReceiverに統合
+    - 当初: OAuthはポート3100、ngrokはポート3000に転送
+    - 解決: receiver.appにOAuthルートを追加（src/app.ts:40-41行目）
+    - 結果: ngrok URLを変更せずにOAuth機能を使用可能
+
 - **/todoと/mentionコマンドの分離実装**
   - `/todo`からメンション表示を削除（src/routes/index.ts:485-543行目）
   - 各コマンドの責務を明確化
-
-- **認証エラーの解決**
-  - Slackボットトークンが2日で変更（異常事態）
-  - `.env`ファイルを新トークンで更新
-  - データベース初期化順序とRedis設定を修正
 
 - **Deep Link機能の修正と改善**
   - Socket ModeでのteamId取得方法を調査・修正
@@ -78,6 +98,18 @@
    - 既読フェードアウト効果
 
 ### 重要な注意事項
+- **OAuth実装**:
+  - Bolt v3制約: clientId/clientSecret/installationStoreとauthorizeは同時指定不可
+  - ExpressReceiverには基本設定のみ、OAuth設定はInstallProviderで分離
+  - 環境変数トークンはフォールバック用として残す
+  - **アドバイスAI最新指摘事項（2025-07-26）**:
+    - ポート3000統合で/apiと/slack/*が共存（CORS/bodyParser競合注意）
+    - SLACK_STATE_SECRETはURL安全文字列推奨（英数字+-_）※現在64文字の安全な文字列を使用中
+    - authorize関数でDB→環境変数のフォールバック順を確認
+    - ngrok URLをSlack App設定の3箇所すべてに反映必要
+    - InstallProviderのdirectInstall=trueは外す検討（CSRF検知エラー回避）
+    - bodyParser二重読み込み防止（/apiにのみ適用、/slackは除外）
+    - authorize経路の可視化（logger.debug追加推奨）
 - **Deep Link**: 非公式URL形式（`slack://`）を使用。将来的に動作しなくなる可能性あり
 - **teamId取得**: イベントタイプにより取得方法が異なる
   - Message Event: `body.team_id`
@@ -131,13 +163,33 @@ node scripts/test-thread-deep-link-simple.js
 
 ## 🎯 次の作業候補
 
+### OAuth Phase 1テスト継続（アドバイスAI最新版反映）
+1. **A-2テスト前の最終確認チェックリスト**:
+   - [ ] ポート3100の重複リッスン削除確認（src/app.tsで3000のみ使用）
+   - [ ] bodyParser設定確認（/apiのみ適用、/slack除外）
+   - [ ] SLACK_STATE_SECRET文字列安全性確認（64文字、英数字のみ）✅
+   - [ ] OAuth Redirect URLの一致確認（.envとコード両方で/slack/oauth/callback）
+   - [ ] authorize関数にデバッグログ追加（DB/ENV判別）
+   - [ ] ngrok URL設定箇所の3点確認（OAuth Redirect、Event Subscriptions、Interactivity）
+   - [ ] Prismaマイグレーション確認（SlackInstallationテーブル存在）
+   - [ ] InstallProviderのdirectInstall設定確認
+   - [ ] DEBUG=bolt:*環境変数でデバッグモード準備
+2. **A-2テスト実行**: OAuth新ワークスペースインストール確認
+3. **A-3テスト実行**: Canary共存動作テスト
+   - `SLACK_OAUTH_ENABLED=true` + 環境変数トークン残し
+   - 旧WS: `/todo`が環境変数トークンで動作
+   - 新WS: `/todo`がOAuthトークンで動作
+4. **A-4テスト実行**: トークン無効化と再インストール確認
+5. **自動テスト追加**: SlackInstallationStore roundtrip, authorize fallback
+6. **Runtime健康チェック**: Redis/BullMQ/Slack Web API確認
+
 ### Kiroタスクから（`.kiro/specs/slack-personal-assistant/tasks.md`より）
 - **Sprint 2進行中**: 現在62%→69%完了
-- **Task 3 (OAuth)**: 現在進行中の最優先タスク
+- **Task 3 (OAuth)**: Phase 1テスト実行中
 - **Task 10 (Smart Reply)**: Deep Link実装で一部完了
 
 ### 直近の技術的タスク
-1. **フォルダアクセス機能のinvalid_authエラー修正**（OAuth実装待ち）
+1. **OAuth Phase 1完了後**: フォルダアクセス機能のinvalid_authエラー修正
 2. **Deep Linkスレッドパネル自動表示問題**（低優先度、現状維持）
 3. **フォルダ選定基準の明確化**
 
@@ -164,6 +216,186 @@ Claudeは以下のタイミングでこのファイルを自動更新します�
 
 ### 手動更新のリクエスト
 「現在の状況をCLAUDE.mdに更新してください」と伝えることで、いつでも更新を依頼できます。
+
+## 📋 OAuth移行テスト計画詳細
+
+### テストシナリオ
+1. **A-1: 既存Botトークンテスト** ✅
+   - 事前条件: `SLACK_OAUTH_ENABLED=false`, `SLACK_BOT_TOKEN`設定済み
+   - 期待結果: レスポンス200、authorizeログなし
+
+2. **A-2: OAuth新ワークスペース** 🔧
+   - 事前条件: `SLACK_OAUTH_ENABLED=true` (他は空にしない)
+   - 手順: `/slack/install`→インストール
+   - 期待結果: SlackInstallationにレコード保存、`/help`成功
+
+3. **A-3: 共存動作(Canary)** ⏳
+   - 設定: `SLACK_OAUTH_ENABLED=true` + `SLACK_BOT_TOKEN`残す
+   - 期待: 両方のauthorizeソースがログに表示
+
+4. **A-4: トークン無効化** ⏳
+   - Bot削除→`invalid_auth`→レコード削除→401エラー→再インストール
+
+### デバッグTips
+- `DEBUG="bolt:*"` でBoltのauthorize経路を追跡
+- `npx prisma studio` でSlackInstallationをリアルタイム確認
+
+### A-2テスト時のエラーと解決策
+1. **OAuth initialization failed**
+   - 原因: ポート設定の不一致
+   - 解決: OAuthルートをExpressReceiver (port 3000)に統合 ✅
+
+2. **ngrok転送先エラー (ERR_NGROK_8012)**
+   - 原因: ngrokがポート3000に転送、OAuthはポート3100
+   - 解決: OAuthルートをポート3000のアプリに統合 ✅
+
+3. **ポート使用中エラー (EADDRINUSE)**
+   - 原因: 前のプロセスがポートを占有
+   - 解決: `netstat -ano | findstr :3100` でPID確認、`taskkill`で終了
+
+4. **予想される追加エラー（アドバイスAIより）**
+   - **invalid_state**: state文字列の不一致（URL安全文字列でない場合）
+   - **not_authed**: Bot User ID解決失敗（OAuth後の初期化問題）
+   - **CSRF検知エラー**: directInstall=trueでstateパラメータ無し
+   - **bodyParser競合**: raw-body二重読み込みエラー
+
+### アドバイスAIからの追加チェックポイント
+1. **bodyParser競合**
+   - /apiルートにbodyParser.json()適用
+   - /slackルートには適用しない（raw-body使用）
+
+2. **デバッグ強化**
+   - `DEBUG=bolt:*`でBolt経路確認
+   - InstallProviderに`logger: console`追加
+   - authorize関数にDB/ENV判別ログ追加
+
+3. **Slack App設定確認**
+   - OAuth Redirect URL: `/slack/oauth/callback`
+   - Event Subscriptions: `/slack/events`
+   - Interactivity: `/slack/actions`
+
+### 🔄 サーバー再起動方法
+```bash
+# Windowsの場合
+powershell -Command "Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force"
+npm run dev
+
+# ポートが使用中の場合
+netstat -ano | findstr :3000
+netstat -ano | findstr :3100
+taskkill /PID <PID> /F
+```
+
+## 🎯 現在の作業状況（2025-07-26 17:00更新）
+
+### ✅ A-2テスト前の最終確認チェックリスト完了
+
+#### 実施結果サマリ
+1. **ポート3100の重複リッスン削除** ✅
+   - 問題発見: src/app.ts:110-116行目でポート3100のExpressサーバーが動作
+   - 修正実施: APIルートをreceiver.app（ポート3000）に統合
+   - 結果: OAuth、API、Slackイベントがすべてポート3000で動作
+
+2. **bodyParser設定確認** ✅
+   - src/app.ts:61行目で/apiパスのみにexpress.json()を適用
+   - Slackルート（/slack/*）はraw-bodyを使用するため除外
+
+3. **OAuth Redirect URLの一致確認** ✅
+   - .env: `/slack/oauth/callback`
+   - oauthIntegration.ts: `/slack/oauth/callback`
+   - 完全に一致
+
+4. **authorize関数にデバッグログ追加** ✅
+   - 既に実装済み（slackAuthorize.ts:18,35,47行目）
+   - OAuth: `[authorize] team ${teamId} via DB (OAuth)`
+   - ENV: `[authorize] team ${teamId} via ENV (fallback)`
+   - エラー: `[authorize] team ${teamId} - NO AUTH AVAILABLE`
+
+5. **ngrok URL設定箇所の3点確認** ✅
+   - Slack App管理画面で以下の設定が必要:
+   - OAuth Redirect URL: `https://6c6f7ffe797a.ngrok-free.app/slack/oauth/callback`
+   - Event Subscriptions: `https://6c6f7ffe797a.ngrok-free.app/slack/events`
+   - Interactivity: `https://6c6f7ffe797a.ngrok-free.app/slack/actions`
+
+6. **Prismaマイグレーション確認** ✅
+   - マイグレーションは最新状態
+   - SlackInstallationテーブルが存在
+
+7. **InstallProviderのdirectInstall設定確認** ✅
+   - directInstallは使用していない（推奨通り）
+
+8. **DEBUG環境変数の準備** ✅
+   - テスト実行時に`set DEBUG=bolt:*`を使用
+
+#### 🛠️ 修正したファイル
+- **src/app.ts**: ポート3100の削除、APIルート統合
+
+### アドバイスAIからの最新フィードバック対応
+1. **実装状況の確認完了**:
+   - ポート3000統合アプローチを採用（ngrok URL変更回避）
+   - authorize関数は正しくOAuth→環境変数フォールバック実装済み
+   - SLACK_STATE_SECRETは64文字の安全な文字列使用中
+
+2. **A-2テスト前に必要な追加対応**:
+   - bodyParser設定の明示的な分離（/apiのみ適用）→ 実装済み
+   - authorize関数へのデバッグログ追加 → 次に実施
+   - InstallProviderのdirectInstall設定確認 → 確認予定
+   - ポート3100の完全な削除確認 → 完了
+
+### 🚀 A-2テスト実行状況（2025-07-26 17:20）
+
+#### ✅ 事前確認完了
+1. **Bot Token Scopes**: 必要なスコープが設定済み（14個）
+2. **環境変数**: OAuthモード専念設定済み（BOTトークンはコメントアウト）
+3. **SLACK_STATE_SECRET**: 64文字の安全な文字列
+
+#### 🔧 実行時エラーと修正
+1. **エラー1**: `TypeError: this.logger.getLevel is not a function`
+   - **原因**: InstallProviderに`logger: console`を渡していたが互換性がない
+   - **修正**: oauthIntegration.ts:39行目の`logger: console`を削除
+
+2. **エラー2**: `ReferenceError: receiver is not defined`
+   - **原因**: receiver変数がifブロック内で定義されていたためスコープ外でアクセス不可
+   - **修正**: app.ts:18行目でreceiverをグローバルスコープに宣言
+   - **状態**: 修正完了、再起動待ち
+
+#### 📋 テスト実行手順
+1. **サーバー再起動**
+   ```powershell
+   # Windowsの場合
+   powershell -Command "Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force"
+   set DEBUG=bolt:*,express:*
+   npm run dev
+   ```
+
+2. **期待されるログ**
+   ```
+   [INFO] OAuth mode enabled, skipping Bot User ID resolution
+   [INFO] Slack OAuth available at http://localhost:3000/slack/install
+   ```
+
+3. **OAuthインストールテスト**
+   - ブラウザで `http://localhost:3000/slack/install` へアクセス
+   - Slack認可画面で「Allow」をクリック
+   - 成功画面 → Slackへリダイレクト
+
+4. **動作確認**
+   - インストールしたワークスペースで:
+   - `/help` コマンドを実行 → 200 OK
+   - `/mention` コマンドを実行
+   - DEBUGログで `authorize: team T123 via DB (OAuth)` を確認
+
+#### 🆘 トラブルシューティング早見表
+| 症状 | 原因候補 | 対処 |
+|------|----------|------|
+| `invalid_state` | STATE_SECRET不一致 | Slack App設定を確認 |
+| `missing_scope` | スコープ不足 | Permissionsで追加→再インストール |
+| `via ENV`がログに出る | envトークンがロード | .envファイル再確認、新ターミナルで実行 |
+
+#### エラー時の収集情報
+1. ブラウザのエラーメッセージ
+2. Slackのリターンコード
+3. サーバーのスタックトレース
 
 ---
 *最終更新: 2025-07-26 by Claude Code*

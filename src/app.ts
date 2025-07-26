@@ -16,12 +16,13 @@ const isOAuthEnabled = process.env.SLACK_OAUTH_ENABLED === 'true';
 
 // Initialize Slack app with conditional OAuth support
 let app: App;
+let receiver: ExpressReceiver | undefined;
 
 if (isOAuthEnabled) {
   logger.info('Initializing Slack app with OAuth support');
   
   // Create ExpressReceiver for OAuth support (simplified)
-  const receiver = new ExpressReceiver({
+  receiver = new ExpressReceiver({
     signingSecret: config.slack.signingSecret,
     endpoints: {
       events: '/slack/events',
@@ -35,8 +36,16 @@ if (isOAuthEnabled) {
     authorize, // Use authorize function for OAuth + fallback
     socketMode: false // OAuth requires HTTP mode
   });
+  
+  // Setup OAuth routes on the receiver's express app
+  const oauthIntegration = require('./server/oauthIntegration').default;
+  oauthIntegration(receiver.app);
 } else {
   logger.info('Initializing Slack app with environment token');
+  
+  if (!config.slack.botToken) {
+    throw new Error('SLACK_BOT_TOKEN is required when SLACK_OAUTH_ENABLED is false');
+  }
   
   app = new App({
     token: config.slack.botToken,
@@ -47,10 +56,13 @@ if (isOAuthEnabled) {
   });
 }
 
-// Initialize Express app for REST API
-const expressApp = express();
-expressApp.use(express.json());
-expressApp.use('/', apiRoutes);
+// Setup API routes on receiver's express app if OAuth is enabled
+if (isOAuthEnabled && receiver && 'app' in receiver) {
+  // Apply body parser only to /api routes to avoid conflicts with Slack raw-body
+  receiver.app.use('/api', express.json());
+  receiver.app.use('/api', apiRoutes);
+  logger.info('API routes configured on receiver app');
+}
 
 async function startApp() {
   try {
@@ -95,20 +107,11 @@ async function startApp() {
     await app.start();
     logger.info(`Slack app is running on port ${config.server.port}`);
 
-    // Setup Slack OAuth routes (if enabled)
+    // OAuth routes are now setup on receiver's express app (port 3000)
     if (isOAuthEnabled) {
-      const oauthIntegration = require('./server/oauthIntegration').default;
-      oauthIntegration(expressApp);
+      logger.info(`Slack OAuth available at http://localhost:${config.server.port}/slack/install`);
+      logger.info(`REST API available at http://localhost:${config.server.port}/api`);
     }
-
-    // Start Express server for REST API
-    const expressPort = config.server.port + 100; // Use port offset of 100 to avoid conflicts
-    expressApp.listen(expressPort, () => {
-      logger.info(`REST API server running on port ${expressPort}`);
-      if (isOAuthEnabled) {
-        logger.info(`Slack OAuth available at http://localhost:${expressPort}/slack/install`);
-      }
-    });
 
     // Graceful shutdown handling
     process.on('SIGTERM', async () => {

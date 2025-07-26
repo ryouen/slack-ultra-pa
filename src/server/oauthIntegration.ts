@@ -36,6 +36,7 @@ export default function initOAuth(expressApp: express.Application): void {
       clientId,
       clientSecret,
       stateSecret,
+      // Remove logger: console as it causes compatibility issues
       installationStore: {
         storeInstallation: async (installation) => {
           await slackInstallationStore.storeInstallation(installation);

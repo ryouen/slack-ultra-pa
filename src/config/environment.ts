@@ -48,12 +48,24 @@ interface Config {
 }
 
 function validateRequiredEnvVars(): void {
+  // OAuth mode check
+  const isOAuthEnabled = process.env['SLACK_OAUTH_ENABLED'] === 'true';
+  
+  // Base required variables
   const required = [
-    'SLACK_BOT_TOKEN',
     'SLACK_SIGNING_SECRET',
     'DATABASE_URL',
     'REDIS_URL',
   ];
+  
+  // Add conditional requirements
+  if (!isOAuthEnabled) {
+    required.push('SLACK_BOT_TOKEN');
+  } else {
+    // OAuth mode requires different variables
+    const oauthRequired = ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET', 'SLACK_STATE_SECRET'];
+    required.push(...oauthRequired);
+  }
 
   const missing = required.filter(key => !process.env[key]);
   
@@ -71,7 +83,7 @@ export const config: Config = {
     nodeEnv: process.env['NODE_ENV'] ?? 'development',
   },
   slack: {
-    botToken: process.env['SLACK_BOT_TOKEN']!,
+    botToken: process.env['SLACK_BOT_TOKEN'] || '',  // OAuth mode may not have token
     signingSecret: process.env['SLACK_SIGNING_SECRET']!,
     socketMode: process.env['SLACK_SOCKET_MODE'] === 'true',
     appToken: process.env['SLACK_APP_TOKEN'] || undefined,
