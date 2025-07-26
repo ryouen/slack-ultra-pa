@@ -2,12 +2,10 @@ import { Queue, Worker, QueueOptions, WorkerOptions } from 'bullmq';
 import Redis from 'ioredis';
 import { config } from '@/config/environment';
 import { logger } from '@/utils/logger';
+import { createBullMQRedisClient } from '@/config/redis';
 
-// Redis connection for BullMQ
-const redisConnection = new Redis(config.redis.url, {
-  maxRetriesPerRequest: 3,
-  retryDelayOnFailover: 100,
-});
+// Redis connection for BullMQ - use unified configuration
+const redisConnection = createBullMQRedisClient();
 
 // Job queue instances
 export const reminderQueue = new Queue('reminder', { connection: redisConnection });

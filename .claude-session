@@ -1,0 +1,34 @@
+# Claude Code Session Info
+# このファイルは自動生成されます。編集しないでください。
+
+SESSION_START: 2025-07-26T18:00:00Z
+LAST_UPDATE: 2025-07-26T15:50:00Z
+
+# 直近の作業
+RECENT_WORK:
+- Deep Link機能の修正完了
+- teamId取得方法の調査と文書化
+- ドキュメントの整理（docs/claude/へ移動）
+- CLAUDE.md作成（セッション引き継ぎガイド）
+
+# アクティブなファイル
+ACTIVE_FILES:
+- src/handlers/quickReplyHandler.ts
+- src/ui/SmartReplyUIBuilder.ts
+- src/utils/threadDeepLink.ts
+- CLAUDE.md
+
+# 未完了タスク
+PENDING_TASKS:
+- プライベートチャンネルでのDeep Link動作検証
+- クロスプラットフォームQAテスト
+
+# 重要な決定事項
+DECISIONS:
+- teamId取得: 現在の実装（team_id || team?.id）を維持
+- Deep Link: 非公式形式だがフォールバック付きで使用継続
+
+# 環境情報
+NODE_VERSION: v22.16.0
+PROJECT: slack-ultra-pa
+WORKING_DIR: D:\Dropbox\ai\slack-ultra-pa

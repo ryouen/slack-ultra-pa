@@ -1,6 +1,7 @@
 import { Queue, Worker, Job, QueueOptions, WorkerOptions } from 'bullmq';
 import { Redis } from 'ioredis';
 import { logger } from '@/utils/logger';
+import { createBullMQRedisClient } from '@/config/redis';
 
 // Job Types
 export enum JobType {
@@ -52,24 +53,8 @@ export class JobQueueService {
   private workers: Map<JobType, Worker> = new Map();
 
   constructor() {
-    // Initialize Redis connection
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      db: parseInt(process.env.REDIS_DB || '0'),
-      retryDelayOnFailover: 100,
-      enableReadyCheck: false,
-      maxRetriesPerRequest: null,
-    });
-
-    this.redis.on('connect', () => {
-      logger.info('Redis connected for job queue');
-    });
-
-    this.redis.on('error', (error) => {
-      logger.error('Redis connection error', { error });
-    });
+    // Initialize Redis connection using unified config
+    this.redis = createBullMQRedisClient();
   }
 
   /**
