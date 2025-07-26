@@ -10,6 +10,23 @@
 現在の状況を教えてください。CLAUDE.mdを確認してください。
 ```
 
+より詳細な状況把握が必要な場合は、以下のコマンドを使用してください：
+
+```
+フォルダの必要なドキュメントとコードを細大漏らさずUltrathinkして読み、状況把握に努めてください
+```
+
+このコマンドは以下を実行します：
+- Kiroのスペック文書を徹底的に分析
+  - `.kiro/specs/slack-personal-assistant/` - design.md, tasks.md, requirements.md
+  - `.kiro/steering/` - project-standards.md
+- Claudeドキュメントを確認
+  - `docs/claude/DOCUMENT_INDEX.md` - ドキュメント索引
+  - `docs/claude/planning/CLAUDE_KIRO_COLLABORATION_PROTOCOL.md` - 協働プロトコル
+  - `docs/claude/work-reports/` - 最新の作業レポート
+- 主要なソースコードの現状を把握
+- git statusで示された変更ファイルを確認
+
 ## 🎯 重要な前提事項
 
 ### Kiroとの共同作業体制
@@ -23,20 +40,31 @@
 - **ユーザー体験優先**: シンプルで使いやすいUI
 
 ### ドキュメントの場所
-- **Steering**: `.kiro/specs/slack-personal-assistant/`
-  - `steering.md` - プロジェクト方向性
-  - `design.md` - 設計思想
+- **Kiroスペック**: `.kiro/specs/slack-personal-assistant/`
+  - `design.md` - システム設計とアーキテクチャ
   - `tasks.md` - タスク一覧と進捗
+  - `requirements.md` - 要件定義
+- **プロジェクト標準**: `.kiro/steering/`
+  - `project-standards.md` - 技術スタック・コード標準
 - **Claudeドキュメント**: `docs/claude/`
   - 索引: `DOCUMENT_INDEX.md`
 
 ## 📌 現在の状況（2025-07-26更新）
 
 ### 直近の作業内容
+- **/todoと/mentionコマンドの分離実装**
+  - `/todo`からメンション表示を削除（src/routes/index.ts:485-543行目）
+  - 各コマンドの責務を明確化
+
+- **認証エラーの解決**
+  - Slackボットトークンが2日で変更（異常事態）
+  - `.env`ファイルを新トークンで更新
+  - データベース初期化順序とRedis設定を修正
+
 - **Deep Link機能の修正と改善**
   - Socket ModeでのteamId取得方法を調査・修正
   - `slack://`プロトコルでスレッドパネルを直接開く機能を実装
-  - 詳細: `docs/claude/work-reports/TASK_DEEP_LINK_FIX_COMPLETION_REPORT.md`
+  - 詳細: `docs/claude/work-reports/2025-07-26_work_report.md`
 
 ### アクティブな機能
 1. **Smart Reply（Quick Reply）**
@@ -54,6 +82,8 @@
 - **teamId取得**: イベントタイプにより取得方法が異なる
   - Message Event: `body.team_id`
   - Block Actions: `body.team.id`
+- **Redis設定**: BullMQには`maxRetriesPerRequest: null`が必須
+- **認証トークン**: Slackトークンが急に変更される場合がある（要確認）
 
 ## 🗂️ プロジェクト構造
 
@@ -107,9 +137,9 @@ node scripts/test-thread-deep-link-simple.js
 - **Task 10 (Smart Reply)**: Deep Link実装で一部完了
 
 ### 直近の技術的タスク
-1. **プライベートチャンネルでのDeep Link動作検証**
-2. **クロスプラットフォームQAテスト**（Windows/Mac/iOS/Android）
-3. **エラーハンドリングの強化**
+1. **フォルダアクセス機能のinvalid_authエラー修正**（OAuth実装待ち）
+2. **Deep Linkスレッドパネル自動表示問題**（低優先度、現状維持）
+3. **フォルダ選定基準の明確化**
 
 ## 💡 Tips
 

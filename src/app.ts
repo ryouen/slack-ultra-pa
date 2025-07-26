@@ -1,4 +1,4 @@
-import { App } from '@slack/bolt';
+import { App, ExpressReceiver } from '@slack/bolt';
 import { config } from '@/config/environment';
 import { logger } from '@/utils/logger';
 import { setupRoutes } from '@/routes';
@@ -6,17 +6,46 @@ import { jobQueueService } from '@/services/jobQueueService';
 import { initializeDatabase } from '@/config/database';
 import { initializeMetrics } from '@/config/metrics';
 import { initializeTracing } from '@/config/tracing';
+import { authorize } from '@/services/slackAuthorize';
+import { slackInstallationStore } from '@/services/slackInstallationStore';
 import express from 'express';
 import apiRoutes from '@/routes/api';
 
-// Initialize Slack app
-const app = new App({
-  token: config.slack.botToken,
-  signingSecret: config.slack.signingSecret,
-  socketMode: config.slack.socketMode,
-  appToken: config.slack.appToken,
-  port: config.server.port,
-});
+// Feature flag for OAuth
+const isOAuthEnabled = process.env.SLACK_OAUTH_ENABLED === 'true';
+
+// Initialize Slack app with conditional OAuth support
+let app: App;
+
+if (isOAuthEnabled) {
+  logger.info('Initializing Slack app with OAuth support');
+  
+  // Create ExpressReceiver for OAuth support (simplified)
+  const receiver = new ExpressReceiver({
+    signingSecret: config.slack.signingSecret,
+    endpoints: {
+      events: '/slack/events',
+      commands: '/slack/commands',
+      actions: '/slack/actions'
+    }
+  });
+
+  app = new App({
+    receiver,
+    authorize, // Use authorize function for OAuth + fallback
+    socketMode: false // OAuth requires HTTP mode
+  });
+} else {
+  logger.info('Initializing Slack app with environment token');
+  
+  app = new App({
+    token: config.slack.botToken,
+    signingSecret: config.slack.signingSecret,
+    socketMode: config.slack.socketMode,
+    appToken: config.slack.appToken,
+    port: config.server.port,
+  });
+}
 
 // Initialize Express app for REST API
 const expressApp = express();
@@ -42,14 +71,43 @@ async function startApp() {
     await setupRoutes(app);
     logger.info('Slack routes configured');
 
+    // Setup error handling for token revocation
+    app.error(async (error) => {
+      if (error.code === 'slack_webapi_platform_error' && error.data?.error === 'invalid_auth') {
+        const teamId = error.data?.team || 'UNKNOWN';
+        logger.error(`Slack token revoked for team ${teamId}`, { error });
+        
+        // Delete invalid installation
+        if (isOAuthEnabled) {
+          try {
+            await slackInstallationStore.deleteInstallation({ teamId });
+            logger.info(`Deleted invalid installation for team ${teamId}`);
+          } catch (deleteError) {
+            logger.error('Failed to delete invalid installation', { deleteError, teamId });
+          }
+        }
+      } else {
+        logger.error('Slack app error', { error });
+      }
+    });
+
     // Start Slack app
     await app.start();
     logger.info(`Slack app is running on port ${config.server.port}`);
+
+    // Setup Slack OAuth routes (if enabled)
+    if (isOAuthEnabled) {
+      const oauthIntegration = require('./server/oauthIntegration').default;
+      oauthIntegration(expressApp);
+    }
 
     // Start Express server for REST API
     const expressPort = config.server.port + 100; // Use port offset of 100 to avoid conflicts
     expressApp.listen(expressPort, () => {
       logger.info(`REST API server running on port ${expressPort}`);
+      if (isOAuthEnabled) {
+        logger.info(`Slack OAuth available at http://localhost:${expressPort}/slack/install`);
+      }
     });
 
     // Graceful shutdown handling

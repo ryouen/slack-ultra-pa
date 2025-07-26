@@ -13,9 +13,16 @@ import oauthRoutes from './oauth';
  * Setup all Slack Bolt routes and handlers
  */
 export async function setupRoutes(app: App): Promise<void> {
-  // Resolve Bot User ID for Quick Reply handler
-  const BOT_USER_ID = await resolveBotUserId(app);
-  logger.info('Bot User ID resolved for routes', { BOT_USER_ID });
+  // Resolve Bot User ID for Quick Reply handler (skip in OAuth mode)
+  const isOAuthEnabled = process.env.SLACK_OAUTH_ENABLED === 'true';
+  let BOT_USER_ID: string | undefined;
+  
+  if (!isOAuthEnabled) {
+    BOT_USER_ID = await resolveBotUserId(app);
+    logger.info('Bot User ID resolved for routes', { BOT_USER_ID });
+  } else {
+    logger.info('OAuth mode enabled, skipping Bot User ID resolution');
+  }
   // Middleware for metrics collection
   app.use(async ({ next, payload }) => {
     const startTime = Date.now();
@@ -482,70 +489,12 @@ export async function setupRoutes(app: App): Promise<void> {
           });
         }
         
-        // Collect recent mentions (limit to 3)
-        const allMentions = await taskService.collectRecentMentions(user.id);
-        const recentMentions = allMentions.slice(0, 3);
+        // メンション表示を削除 - /mentionコマンドを使用してください
         
-        // Add mentions if any
-        if (recentMentions.length > 0) {
-          // Add mentions header
-          responseBlocks.push({
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: language === 'ja' ? '[MENTIONS] 未対応のメンション' : '[MENTIONS] Unaddressed Mentions',
-            },
-          });
-          responseBlocks.push({
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: language === 'ja'
-                ? `${recentMentions.length}件の未対応メンション (全${allMentions.length}件中)`
-                : `${recentMentions.length} unaddressed mentions (out of ${allMentions.length} total)`,
-            },
-          });
-          responseBlocks.push({ type: 'divider' });
-          
-          // Add mentions to response blocks
-          for (const mention of recentMentions) {
-            // Add mention text
-            // The messageText already contains proper Slack user mentions like <@U123456>
-            // which Slack will automatically render as user mentions
-            responseBlocks.push({
-              type: 'section' as const,
-              text: {
-                type: 'mrkdwn' as const,
-                text: `*#${mention.channelName || mention.channelId}*\n${mention.messageText.substring(0, 100)}${mention.messageText.length > 100 ? '...' : ''}`
-              }
-            });
-            
-            
-            // Add divider between mentions
-            responseBlocks.push({
-              type: 'divider' as const
-            });
-          }
-          
-          // Add "View all" link if there are more mentions
-          if (allMentions.length > 3) {
-            responseBlocks.push({
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: language === 'ja'
-                  ? `すべてのメンションを見るには \`/mention\` を使用してください`
-                  : `Use \`/mention\` to view all mentions`
-              }
-            });
-            responseBlocks.push({ type: 'divider' });
-          }
-        }
-        
-        // Send the combined response
-        const titleText = tasksCount > 0 
-          ? (language === 'ja' ? '[TASKS & MENTIONS] 今日のタスクとメンション' : '[TASKS & MENTIONS] Today\'s Tasks and Mentions')
-          : (language === 'ja' ? '[MENTIONS] 未対応のメンション' : '[MENTIONS] Unaddressed Mentions');
+        // Send the response
+        const titleText = language === 'ja' 
+          ? '[TASKS] 今日のタスク' 
+          : '[TASKS] Today\'s Tasks';
           
         await respond({
           text: titleText,
@@ -1129,8 +1078,13 @@ export async function setupRoutes(app: App): Promise<void> {
   // Register mention routes
   registerMentionRoutes(app);
   
-  // Setup Quick Reply handler for bot mentions
-  setupQuickReplyHandler(app, BOT_USER_ID);
+  // Setup Quick Reply handler for bot mentions (skip in OAuth mode)
+  if (!isOAuthEnabled && BOT_USER_ID) {
+    setupQuickReplyHandler(app, BOT_USER_ID);
+    logger.info('Quick Reply handler configured');
+  } else {
+    logger.info('OAuth mode enabled, skipping Quick Reply handler setup');
+  }
 
   logger.info('Slack routes configured successfully');
 }
