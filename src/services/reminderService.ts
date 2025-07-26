@@ -1,5 +1,6 @@
 import { logger } from '@/utils/logger';
 import { getPrismaClient } from '@/config/database';
+import { jobQueueService, JobType, ReminderJobData } from './jobQueueService';
 import { TaskService } from './taskService';
 
 export interface ReminderSchedule {
@@ -172,6 +173,7 @@ export class ReminderService {
    * Create a reminder job in the job queue
    */
   private async createReminderJob(reminder: ReminderSchedule): Promise<void> {
+    // Create job in database for tracking
     await this.prisma.jobQueue.create({
       data: {
         jobType: 'REMINDER',
@@ -182,11 +184,29 @@ export class ReminderService {
       }
     });
 
-    logger.info('Reminder job created', { 
-      taskId: reminder.taskId, 
-      type: reminder.reminderType, 
-      scheduledAt: reminder.scheduledAt 
-    });
+    // Schedule job in BullMQ for actual execution
+    try {
+      const delay = reminder.scheduledAt.getTime() - Date.now();
+      
+      const reminderJobData: ReminderJobData = {
+        taskId: reminder.taskId,
+        userId: reminder.userId,
+        reminderType: reminder.reminderType,
+        scheduledAt: reminder.scheduledAt,
+        message: reminder.message || `Reminder: Task requires attention`
+      };
+
+      await jobQueueService.scheduleReminder(reminderJobData, delay);
+      
+      logger.info('Reminder job created in both database and BullMQ', { 
+        taskId: reminder.taskId, 
+        type: reminder.reminderType, 
+        scheduledAt: reminder.scheduledAt 
+      });
+    } catch (error) {
+      logger.error('Failed to schedule reminder in BullMQ', { error, reminder });
+      // Job is still tracked in database, but won't execute
+    }
   }
 
   /**

@@ -1,14 +1,16 @@
 import { Block, KnownBlock } from '@slack/bolt';
 import { AnalysisResult } from '@/llm/MessageAnalyzer';
 
+import { convertToThreadDeepLink } from '@/utils/threadDeepLink';
+
 export class SmartReplyUIBuilder {
-  buildUI(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string }): (KnownBlock | Block)[] {
+  buildUI(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string; permalink?: string; teamId?: string }): (KnownBlock | Block)[] {
     return analysis.type === 'scheduling_request'
       ? this.buildScheduling(analysis, messageText, metadata)
       : this.buildGeneric(analysis, messageText, metadata);
   }
 
-  private buildScheduling(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string }): (KnownBlock | Block)[] {
+  private buildScheduling(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string; permalink?: string; teamId?: string }): (KnownBlock | Block)[] {
     const blocks: (KnownBlock | Block)[] = [
       {
         type: 'section',
@@ -21,7 +23,7 @@ export class SmartReplyUIBuilder {
     ];
 
     // カレンダーリンク（最初の日付から週を計算）
-    if (analysis.dates?.length) {
+    if (analysis.dates && analysis.dates.length > 0) {
       const firstDate = analysis.dates[0].date;
       const calendarUrl = this.generateCalendarUrl(firstDate);
       blocks.push({
@@ -95,31 +97,42 @@ export class SmartReplyUIBuilder {
 
     // 操作ボタン
     const dueDate = this.calculateDueDate(analysis);
+    const buttonElements: any[] = [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'タスクとして追加' },
+        action_id: 'add_task_from_smart_reply',
+        value: JSON.stringify({
+          title: `日程調整: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
+          dueDate: dueDate.toISOString()
+        })
+      }
+    ];
+
+    // Add thread button - only if permalink is available
+    if (metadata?.permalink) {
+      // Convert to thread deep-link if teamId is available
+      const threadUrl = metadata.teamId 
+        ? convertToThreadDeepLink(metadata.permalink, metadata.teamId) || metadata.permalink
+        : metadata.permalink;
+      
+      buttonElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: 'スレッドへ' },
+        url: threadUrl
+      });
+    }
+    // permalinkがない場合はボタンを表示しない（中間メッセージを避けるため）
+
     blocks.push({
       type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'タスクとして追加' },
-          action_id: 'add_task_from_smart_reply',
-          value: JSON.stringify({
-            title: `日程調整: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}`,
-            dueDate: dueDate.toISOString()
-          })
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'スレッドで返信する' },
-          action_id: 'thread_reply_jump',
-          value: metadata ? JSON.stringify(metadata) : 'thread_jump'
-        }
-      ]
+      elements: buttonElements
     });
 
     return blocks;
   }
 
-  private buildGeneric(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string }): (KnownBlock | Block)[] {
+  private buildGeneric(analysis: AnalysisResult, messageText: string, metadata?: { originalTs: string; channelId: string; permalink?: string; teamId?: string }): (KnownBlock | Block)[] {
     const blocks: (KnownBlock | Block)[] = [
       {
         type: 'section',
@@ -190,25 +203,36 @@ export class SmartReplyUIBuilder {
     const nextBusinessDay = this.getNextBusinessDay(new Date());
     nextBusinessDay.setHours(18, 0, 0, 0);
 
+    const buttonElements: any[] = [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'タスクとして追加' },
+        action_id: 'add_task_from_smart_reply',
+        value: JSON.stringify({
+          title: messageText.substring(0, 100),
+          dueDate: nextBusinessDay.toISOString()
+        })
+      }
+    ];
+
+    // Add thread button - only if permalink is available
+    if (metadata?.permalink) {
+      // Convert to thread deep-link if teamId is available
+      const threadUrl = metadata.teamId 
+        ? convertToThreadDeepLink(metadata.permalink, metadata.teamId) || metadata.permalink
+        : metadata.permalink;
+      
+      buttonElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: 'スレッドへ' },
+        url: threadUrl
+      });
+    }
+    // permalinkがない場合はボタンを表示しない（中間メッセージを避けるため）
+
     blocks.push({
       type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'タスクとして追加' },
-          action_id: 'add_task_from_smart_reply',
-          value: JSON.stringify({
-            title: messageText.substring(0, 100),
-            dueDate: nextBusinessDay.toISOString()
-          })
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'スレッドで返信する' },
-          action_id: 'thread_reply_jump',
-          value: metadata ? JSON.stringify(metadata) : 'thread_jump'
-        }
-      ]
+      elements: buttonElements
     });
 
     return blocks;
@@ -234,7 +258,7 @@ export class SmartReplyUIBuilder {
   }
 
   private calculateDueDate(analysis: AnalysisResult): Date {
-    if (analysis.type === 'scheduling_request' && analysis.dates?.length) {
+    if (analysis.type === 'scheduling_request' && analysis.dates && analysis.dates.length > 0) {
       // 最初の候補日の前日23:59
       const targetDate = new Date(analysis.dates[0].date);
       targetDate.setDate(targetDate.getDate() - 1);

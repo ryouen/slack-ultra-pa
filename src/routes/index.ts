@@ -6,6 +6,8 @@ import { registerHierarchyRoutes } from './hierarchyRoutes';
 import { registerMentionRoutes } from './mentionRoutes';
 import { setupQuickReplyHandler } from '@/handlers/quickReplyHandler';
 import { resolveBotUserId } from '@/config/botConfig';
+import { Router } from 'express';
+import oauthRoutes from './oauth';
 
 /**
  * Setup all Slack Bolt routes and handlers
@@ -337,25 +339,56 @@ export async function setupRoutes(app: App): Promise<void> {
         // Build response blocks
         const responseBlocks: any[] = [];
         
-        // Add header
-        if (tasksCount > 0) {
-          responseBlocks.push({
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: language === 'ja' ? '[TASKS] 今日の優先タスクTop5' : '[TASKS] Top 5 Priority Tasks Today',
-            },
-          });
-          responseBlocks.push({ type: 'divider' });
-        }
-        
         // Add tasks if any
         if (tasksCount > 0) {
-          const tasks = subcommand === 'today'
+          const allTasks = subcommand === 'today'
             ? await taskService.getDailyTop5Tasks(user.id)
             : await taskService.getAllTasks(user.id);
           
-          tasks.forEach(task => {
+          // Import URL detection utility once
+          const { detectFolderUrls } = await import('@/utils/urlDetection');
+          
+          // Filter out tasks that were created from mentions
+          const pureTasks: typeof allTasks = [];
+          
+          allTasks.forEach(task => {
+            // Check if task has source metadata (was created from a mention)
+            let isFromMention = false;
+            
+            if (task.folderUrls && task.folderUrls.length > 0) {
+              try {
+                const parsed = typeof task.folderUrls === 'string' ? JSON.parse(task.folderUrls) : task.folderUrls;
+                if (!Array.isArray(parsed) && parsed.channelId) {
+                  // This is source metadata - task was created from mention
+                  isFromMention = true;
+                }
+              } catch (e) {
+                // Not JSON, this is a pure task with folder URLs
+                isFromMention = false;
+              }
+            }
+            
+            if (!isFromMention) {
+              pureTasks.push(task);
+            }
+          });
+          
+          // Only show tasks section if there are pure tasks
+          if (pureTasks.length > 0) {
+            // Add header for tasks
+            responseBlocks.push({
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: language === 'ja' 
+                  ? `[TASKS] 今日の優先タスクTop${pureTasks.length}` 
+                  : `[TASKS] Top ${pureTasks.length} Priority Tasks Today`,
+              },
+            });
+            responseBlocks.push({ type: 'divider' });
+          }
+          
+          pureTasks.forEach(task => {
             const badgeText = task.badges.join(' ');
             const dueDateText = task.dueDate
               ? (language === 'ja' ? `期限: ${task.dueDate.toLocaleDateString('ja-JP')}` : `Due: ${task.dueDate.toLocaleDateString()}`)
@@ -386,6 +419,8 @@ export async function setupRoutes(app: App): Promise<void> {
             // Check if task has source metadata (was created from a mention)
             let hasSourceMetadata = false;
             let sourceMetadata: any = null;
+            let folderUrls: string[] = [];
+            
             if (task.folderUrls && task.folderUrls.length > 0) {
               // Try to parse as source metadata first
               try {
@@ -396,26 +431,28 @@ export async function setupRoutes(app: App): Promise<void> {
                   hasSourceMetadata = true;
                 } else if (Array.isArray(parsed) && parsed.length > 0) {
                   // This is actual folder URLs
-                  actionElements.push({
-                    type: 'button',
-                    text: {
-                      type: 'plain_text',
-                      text: '[FOLDER] フォルダ'
-                    },
-                    action_id: `open_folder_${task.id}`,
-                    value: JSON.stringify({ taskId: task.id, urls: parsed })
-                  });
+                  folderUrls = parsed;
                 }
               } catch (e) {
                 // Not JSON, treat as simple folder URL
+                folderUrls = [task.folderUrls];
+              }
+            }
+
+            // Add folder button if we have valid URLs
+            if (folderUrls.length > 0) {
+              // Validate URLs using the detection utility
+              const validUrls = detectFolderUrls(folderUrls.join(' '));
+              
+              if (validUrls.length > 0 || folderUrls.some(url => url.startsWith('http'))) {
                 actionElements.push({
                   type: 'button',
                   text: {
                     type: 'plain_text',
-                    text: '[FOLDER] フォルダ'
+                    text: '📂 フォルダ'
                   },
                   action_id: `open_folder_${task.id}`,
-                  value: JSON.stringify({ taskId: task.id, urls: [task.folderUrls] })
+                  value: JSON.stringify({ taskId: task.id, urls: folderUrls })
                 });
               }
             }
@@ -445,8 +482,9 @@ export async function setupRoutes(app: App): Promise<void> {
           });
         }
         
-        // Collect recent mentions
-        const recentMentions = await taskService.collectRecentMentions(user.id);
+        // Collect recent mentions (limit to 3)
+        const allMentions = await taskService.collectRecentMentions(user.id);
+        const recentMentions = allMentions.slice(0, 3);
         
         // Add mentions if any
         if (recentMentions.length > 0) {
@@ -455,7 +493,7 @@ export async function setupRoutes(app: App): Promise<void> {
             type: 'header',
             text: {
               type: 'plain_text',
-              text: language === 'ja' ? '[INBOX] 過去3営業日のメンション' : '[INBOX] Recent Mentions',
+              text: language === 'ja' ? '[MENTIONS] 未対応のメンション' : '[MENTIONS] Unaddressed Mentions',
             },
           });
           responseBlocks.push({
@@ -463,8 +501,8 @@ export async function setupRoutes(app: App): Promise<void> {
             text: {
               type: 'mrkdwn',
               text: language === 'ja'
-                ? 'メンションを確認してアクションを選択してください：'
-                : 'Review mentions and choose an action:',
+                ? `${recentMentions.length}件の未対応メンション (全${allMentions.length}件中)`
+                : `${recentMentions.length} unaddressed mentions (out of ${allMentions.length} total)`,
             },
           });
           responseBlocks.push({ type: 'divider' });
@@ -488,12 +526,26 @@ export async function setupRoutes(app: App): Promise<void> {
               type: 'divider' as const
             });
           }
+          
+          // Add "View all" link if there are more mentions
+          if (allMentions.length > 3) {
+            responseBlocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: language === 'ja'
+                  ? `すべてのメンションを見るには \`/mention\` を使用してください`
+                  : `Use \`/mention\` to view all mentions`
+              }
+            });
+            responseBlocks.push({ type: 'divider' });
+          }
         }
         
         // Send the combined response
         const titleText = tasksCount > 0 
-          ? (language === 'ja' ? '[TASKS] 今日のタスクとメンション' : '[TASKS] Today\'s Tasks and Mentions')
-          : (language === 'ja' ? '[INBOX] 過去3営業日のメンション' : '[INBOX] Recent Mentions');
+          ? (language === 'ja' ? '[TASKS & MENTIONS] 今日のタスクとメンション' : '[TASKS & MENTIONS] Today\'s Tasks and Mentions')
+          : (language === 'ja' ? '[MENTIONS] 未対応のメンション' : '[MENTIONS] Unaddressed Mentions');
           
         await respond({
           text: titleText,
@@ -739,13 +791,15 @@ export async function setupRoutes(app: App): Promise<void> {
 
   // Open folder button handler
   app.action(/^open_folder_(.+)$/, async ({ ack, body, client, action }) => {
+    // Acknowledge immediately to prevent timeout
+    await ack();
+    
     try {
-      // Parse action value first to validate
+      // Parse action value to validate
       const actionValue = (action as any).value;
 
       if (!actionValue) {
         logger.error('Missing action value in folder button');
-        await ack();
         return;
       }
 
@@ -756,7 +810,6 @@ export async function setupRoutes(app: App): Promise<void> {
         urls = parsed.urls;
       } catch (parseError) {
         logger.error('Failed to parse folder button payload', { actionValue, parseError });
-        await ack();
         return;
       }
 
@@ -764,12 +817,8 @@ export async function setupRoutes(app: App): Promise<void> {
 
       if (!taskId || !urls || !Array.isArray(urls)) {
         logger.error('Invalid folder button payload', { taskId, urls });
-        await ack();
         return;
       }
-
-      // Acknowledge immediately after validation
-      await ack();
 
       logger.info('Folder button clicked', {
         taskId,
@@ -841,7 +890,7 @@ export async function setupRoutes(app: App): Promise<void> {
                 text: '開く'
               },
               action_id: `open_single_folder_${taskId}_${index}`,
-              value: JSON.stringify({ taskId, url, userId })
+              value: JSON.stringify({ taskId, url: url, userId })
             }
           }));
 
@@ -929,12 +978,14 @@ export async function setupRoutes(app: App): Promise<void> {
 
   // Single folder open handler
   app.action(/^open_single_folder_(.+)_(\d+)$/, async ({ ack, body, client, action }) => {
+    // Acknowledge immediately to prevent timeout
+    await ack();
+    
     try {
       const actionValue = (action as any).value;
 
       if (!actionValue) {
         logger.error('Missing action value in single folder button');
-        await ack();
         return;
       }
 
@@ -946,17 +997,13 @@ export async function setupRoutes(app: App): Promise<void> {
         userId = parsed.userId;
       } catch (parseError) {
         logger.error('Failed to parse single folder button payload', { actionValue, parseError });
-        await ack();
         return;
       }
 
       if (!taskId || !url || !userId) {
         logger.error('Invalid single folder button payload', { taskId, url, userId });
-        await ack();
         return;
       }
-
-      await ack();
 
       // Get channel ID safely
       let channelId: string;

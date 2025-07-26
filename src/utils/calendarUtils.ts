@@ -71,7 +71,7 @@ export function calculateDueDate(
   type: 'scheduling_request' | 'generic_request',
   dates?: Array<{ date: string; part_of_day: string }>
 ): Date {
-  if (type === 'scheduling_request' && dates && dates.length > 0) {
+  if (type === 'scheduling_request' && dates && dates.length > 0 && dates[0]) {
     // 最初の候補日の前日23:59 JST
     const targetDate = new Date(dates[0].date);
     targetDate.setDate(targetDate.getDate() - 1);

@@ -34,8 +34,9 @@ export class FileIntegrationServiceImpl implements FileIntegrationService {
   }
 
   async detectFolderUrls(text: string): Promise<FolderUrl[]> {
-    // TODO: Implement in task 10.2
-    throw new Error('Not implemented yet');
+    // Import the utility function
+    const { detectFolderUrls } = await import('@/utils/urlDetection');
+    return detectFolderUrls(text);
   }
 
   async executeWithRateLimit(

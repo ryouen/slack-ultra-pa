@@ -258,6 +258,11 @@ export class TaskService {
       authorId: (inboxItem as any).authorId
     };
 
+    // Detect folder URLs from message text
+    const { detectFolderUrls } = await import('@/utils/urlDetection');
+    const detectedUrls = detectFolderUrls(inboxItem.messageText);
+    const folderUrlsData = detectedUrls.length > 0 ? detectedUrls.map(f => f.url) : [];
+
     const task = await this.prisma.task.create({
       data: {
         title,
@@ -267,7 +272,7 @@ export class TaskService {
         priorityScore: 0,
         level: 'SUB_TASK',
         userId: inboxItem.userId,
-        folderUrls: safeJsonStringify(sourceMetadata) // Store source info in folderUrls temporarily
+        folderUrls: safeJsonStringify(folderUrlsData.length > 0 ? folderUrlsData : sourceMetadata)
       }
     });
 
@@ -324,7 +329,9 @@ export class TaskService {
     const analysis = await analyzer.analyzeMessage(inboxItem.messageText);
     const ui = uiBuilder.buildUI(analysis, inboxItem.messageText, {
       originalTs: inboxItem.slackTs,
-      channelId: inboxItem.channelId
+      channelId: inboxItem.channelId,
+      permalink: (inboxItem as any).permalink || undefined,
+      teamId: (inboxItem as any).teamId || undefined
     });
     
     // 互換性のため replies も生成
@@ -572,6 +579,7 @@ export class TaskService {
 
   /**
    * Log folder access
+   * QRMVP Hook Test: Specification compliance check
    */
   async logFolderAccess(taskId: string, url: string, userId: string): Promise<void> {
     try {

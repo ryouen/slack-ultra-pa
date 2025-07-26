@@ -195,6 +195,7 @@ function registerMentionActions(app: App) {
     try {
       const mentionId = (action as any).value;
       const userId = getUserId(body);
+      const teamId = (body as any).team?.id;
       
       // Debug log
       logger.info('Quick Reply action body', { 
@@ -202,7 +203,10 @@ function registerMentionActions(app: App) {
         channelId: body.channel?.id,
         userId: body.user?.id,
         containerId: (body as any).container?.channel_id,
-        responseUrl: (body as any).response_url
+        responseUrl: (body as any).response_url,
+        teamId,
+        teamInfo: (body as any).team,
+        hasTeamId: !!teamId
       });
 
       // Get mention
@@ -227,7 +231,9 @@ function registerMentionActions(app: App) {
       const analysis = await analyzer.analyzeMessage(mention.messageText);
       const blocks = uiBuilder.buildUI(analysis, mention.messageText, {
         originalTs: mention.slackTs,
-        channelId: mention.channelId
+        channelId: mention.channelId,
+        permalink: mention.permalink || undefined,
+        teamId
       });
 
       // Send Smart Reply UI (handles both channel and DM)
@@ -282,22 +288,174 @@ function registerMentionActions(app: App) {
     try {
       const mentionId = (action as any).value;
       const mentionService = new MentionService(client);
-
-      // Mark as read
-      await mentionService.markAsRead(mentionId);
+      const userId = getUserId(body);
 
       // Get user for language
       const user = await prisma.user.findUnique({
-        where: { slackUserId: getUserId(body) }
+        where: { slackUserId: userId }
       });
       const language = user?.language as 'ja' | 'en' || 'ja';
 
-      // Update message
-      await sendReply(client, getChannelId(body), getUserId(body), {
-        text: language === 'ja'
-          ? `[OK] 既読にしました`
-          : `[OK] Marked as read`
-      });
+      // Mark as read in database
+      await mentionService.markAsRead(mentionId);
+
+      // Use response_url to update the original message
+      const response_url = (body as any).response_url;
+      if (response_url) {
+        try {
+          // Get all current mentions
+          const allMentions = await mentionService.getMentions(user!.id, 'all', 48);
+          
+          // Step 1: Update with strikethrough (fade effect)
+          const fadeBlocks: any[] = [];
+          
+          // Add header
+          fadeBlocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: language === 'ja'
+                ? `[INBOX] メンション (${allMentions.length}件)`
+                : `[INBOX] Mentions (${allMentions.length})`
+            }
+          });
+          fadeBlocks.push({ type: 'divider' });
+          
+          // Build blocks with strikethrough for the marked mention
+          for (const mention of allMentions) {
+            const timeAgo = getTimeAgo(new Date(mention.createdAt), language);
+            const importanceIcon = mention.importance === 'high' ? '[URGENT]' : 
+                                  mention.importance === 'medium' ? '[MEDIUM]' : '';
+            
+            const isMarkedMention = mention.id === mentionId;
+            const mentionText = `${importanceIcon} *${timeAgo} - #${mention.channelName || mention.channelId}*\n` +
+                               `${mention.messageText.substring(0, 100)}${mention.messageText.length > 100 ? '...' : ''}`;
+            
+            fadeBlocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: isMarkedMention ? `~${mentionText}~` : mentionText // Strikethrough for marked mention
+              }
+            });
+
+            // Skip action buttons for marked mention
+            if (!isMarkedMention) {
+              const elements: any[] = [
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: language === 'ja' ? 'Quick Reply' : 'Quick Reply'
+                  },
+                  action_id: `mention_quick_reply_${mention.id}`,
+                  value: mention.id
+                },
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: language === 'ja' ? 'タスク化' : 'Task'
+                  },
+                  action_id: `mention_to_task_${mention.id}`,
+                  value: mention.id
+                },
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: language === 'ja' ? '既読' : 'Read'
+                  },
+                  action_id: `mention_mark_read_${mention.id}`,
+                  value: mention.id
+                }
+              ];
+
+              fadeBlocks.push({
+                type: 'actions',
+                elements
+              });
+            }
+
+            fadeBlocks.push({ type: 'divider' });
+          }
+          
+          // First update: show with strikethrough
+          await client.chat.update({
+            channel: getChannelId(body) || userId,
+            ts: (body as any).message?.ts,
+            blocks: fadeBlocks,
+            text: 'Mentions'
+          });
+          
+          // Step 2: After 1 second, remove the marked mention completely
+          setTimeout(async () => {
+            const remainingMentions = allMentions.filter(m => m.id !== mentionId);
+            
+            if (remainingMentions.length === 0) {
+              // No more mentions - show empty state
+              await client.chat.update({
+                channel: getChannelId(body) || userId,
+                ts: (body as any).message?.ts,
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: language === 'ja'
+                        ? '[EMPTY] すべてのメンションを処理しました！ 🎉'
+                        : '[EMPTY] All mentions processed! 🎉'
+                    }
+                  }
+                ],
+                text: 'All mentions processed'
+              });
+            } else {
+              // Rebuild the mention list without the marked item
+              await handleMentionList(
+                async (data: any) => {
+                  await client.chat.update({
+                    channel: getChannelId(body) || userId,
+                    ts: (body as any).message?.ts,
+                    blocks: data.blocks,
+                    text: data.text || 'Mentions'
+                  });
+                },
+                client,
+                user!.id,
+                userId,
+                'all',
+                48,
+                language
+              );
+            }
+          }, 1000); // 1 second delay
+        
+
+          // Send a temporary success message
+          await sendReply(client, getChannelId(body), userId, {
+            text: language === 'ja'
+              ? `✅ 既読にしました`
+              : `✅ Marked as read`
+          });
+
+        } catch (updateError) {
+          logger.error('Failed to update message', { updateError });
+          // Fallback to simple reply
+          await sendReply(client, getChannelId(body), userId, {
+            text: language === 'ja'
+              ? `[OK] 既読にしました`
+              : `[OK] Marked as read`
+          });
+        }
+      } else {
+        // No response_url available, use simple reply
+        await sendReply(client, getChannelId(body), userId, {
+          text: language === 'ja'
+            ? `[OK] 既読にしました`
+            : `[OK] Marked as read`
+        });
+      }
 
     } catch (error) {
       logger.error('Error marking as read', { error });

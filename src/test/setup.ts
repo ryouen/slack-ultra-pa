@@ -4,12 +4,12 @@
 import { jest } from '@jest/globals';
 
 // Mock environment variables for testing
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test_db';
-process.env.REDIS_URL = 'redis://localhost:6379';
-process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
-process.env.SLACK_SIGNING_SECRET = 'test-signing-secret';
-process.env.SLACK_APP_TOKEN = 'xapp-test-token';
+process.env['NODE_ENV'] = 'test';
+process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test_db';
+process.env['REDIS_URL'] = 'redis://localhost:6379';
+process.env['SLACK_BOT_TOKEN'] = 'xoxb-test-token';
+process.env['SLACK_SIGNING_SECRET'] = 'test-signing-secret';
+process.env['SLACK_APP_TOKEN'] = 'xapp-test-token';
 
 // Global test timeout
 jest.setTimeout(10000);

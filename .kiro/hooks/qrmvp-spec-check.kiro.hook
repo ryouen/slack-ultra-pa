@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "QRMVP Specification Compliance Checker",
+  "description": "When source files are updated, intelligently analyze changes with adaptive depth - light check for minor changes, comprehensive analysis for significant implementations including Claude Code collaboration monitoring, QRMVP-JP-1.0 compliance, and project integration management.\n",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.{ts,js,tsx,jsx,json}"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "{file_path}が更新されました。変更の重要度を判定し、適応的な分析を実行してください。\n\n## 🔍 変更重要度判定（必須）\nまず変更の重要度を判定してください：\n1. **軽微**: コメント追加、フォーマット、型定義のみ → 簡潔確認\n2. **中程度**: 既存機能修正、バグ修正、小規模改善 → 標準分析\n3. **重要**: 新機能実装、アーキテクチャ変更、大規模修正 → 包括分析\n\n## 📋 軽微な変更の場合（簡潔確認）\n- 変更内容の1行サマリー\n- 明らかな問題がある場合のみ指摘\n- 処理終了\n\n## 🎯 中程度・重要な変更の場合（詳細分析）\n\n### A. 実装内容分析\n1. **変更内容**: 何を実装・修正したかの詳細\n2. **実装品質**: コード品質、エラーハンドリング評価\n3. **機能完成度**: 実装された機能の完成度\n4. **Claude作業推測**: コメント・パターンからClaude Codeの作業か推測\n\n\n### B. QRMVP-JP-1.0仕様準拠チェック\n5. **仕様適合度**: QRMVP-JP-1.0仕様との整合性\n6. **UI/UX準拠**: Block Kit、ボタンテキスト、説明文の準拠度\n7. **ワークフロー**: ユーザーストーリー実現度\n8. **制約遵守**: 72時間対応、手動確認等の制約準拠\n\n### C. 設計・要件整合性\n9. **Design.md整合性**: 設計書との整合性確認\n10. **Requirements.md適合**: 要件実現度評価\n11. **アーキテクチャ**: 設計されたアーキテクチャからの逸脱検出\n12. **データフロー**: 設計されたデータフローとの整合性\n\n### D. プロジェクト統合管理\n13. **影響範囲**: 他機能への影響・統合リスク評価\n14. **依存関係**: 新たな依存関係・ブロッカーの分析\n15. **テスト必要性**: 必要なテスト項目・テストケース\n16. **統合作業**: Kiroが実施すべき統合・調整作業\n\n### E. 問題検出・修正提案\n17. **設計逸脱**: 設計からの逸脱とその修正提案\n18. **要件不適合**: 要件に適合しない実装の指摘\n19. **品質問題**: コード品質問題と改善提案\n20. **統合リスク**: 統合時の潜在的問題と対策\n\n### F. 協働効率化（Claude作業推測時）\n21. **Claude作業評価**: Claude Codeの作業品質評価\n22. **次タスク推奨**: Claude次タスクの推奨・優先度調整\n23. **協働最適化**: Claude-Kiro協働の効率化提案\n24. **統合指示**: 具体的な統合・調整指示\n\n## 🎯 出力形式\n- **重要度表示**: [軽微/中程度/重要] を明示\n- **緊急度分類**: 🔴即座対応 🟡要注意 🟢良好\n- **アクション指向**: 具体的な次のアクションを明示\n- **建設的**: 問題指摘と解決策をセットで提示\n\n## 🚀 重要な変更時の追加アクション\n重要な変更の場合、以下も実行：\n- Tasks.mdの該当タスク進捗更新提案\n- Design.mdの修正が必要な場合は具体的提案\n- PROGRESS_TRACKING.mdへの影響分析\n\n**重要**: 変更の重要度に応じて適応的に分析深度を調整し、効率的かつ包括的な統合管理を実行してください。\n\n\n## 📄 結果保存\nこの分析結果を以下のファイルに保存してください：\n- ファイル名: .kiro/hook-analysis/YYYY-MM-DD-HH-MM-QRMVPanalysis.md\n- 形式: マークダウン\n- 内容: この分析結果の全文\n\n\n"
+  }
+}

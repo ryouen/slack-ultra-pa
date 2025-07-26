@@ -1,0 +1,83 @@
+=== teamId取得ロジック 修正前テスト ===
+
+テスト結果:
+
+テスト1: Block Actions (正常ケース)
+Body構造: {
+  "type": "block_actions",
+  "team": {
+    "id": "T0979H6R0H7",
+    "domain": "zentechworld"
+  },
+  "user": {
+    "id": "U123456"
+  }
+}
+現在の実装結果: T0979H6R0H7
+修正後の実装結果: T0979H6R0H7
+結果の一致: ✅ 一致
+---
+
+テスト2: Block Actions (teamがnull)
+Body構造: {
+  "type": "block_actions",
+  "team": null,
+  "user": {
+    "id": "U123456"
+  }
+}
+現在の実装結果: undefined
+修正後の実装結果: undefined
+結果の一致: ✅ 一致
+---
+
+テスト3: Block Actions (teamが未定義)
+Body構造: {
+  "type": "block_actions",
+  "user": {
+    "id": "U123456"
+  }
+}
+現在の実装結果: undefined
+修正後の実装結果: undefined
+結果の一致: ✅ 一致
+---
+
+テスト4: Message Event のbody
+Body構造: {
+  "type": "event_callback",
+  "team_id": "T0979H6R0H7",
+  "event": {
+    "type": "message",
+    "team": "T0979H6R0H7"
+  }
+}
+現在の実装結果: T0979H6R0H7
+修正後の実装結果: undefined
+結果の一致: ❌ 不一致
+---
+
+=== Deep Link変換テスト ===
+
+テスト1 (Block Actions (正常ケース)):
+TeamID: T0979H6R0H7
+Deep Link: slack://channel?team=T0979H6R0H7&id=C0979H6S0P8&message=1753404206.917869&tab=thread_ts
+---
+
+テスト2 (Block Actions (teamがnull)):
+TeamID: undefined
+Deep Link: teamIdなし - 標準permalinkを使用
+---
+
+テスト3 (Block Actions (teamが未定義)):
+TeamID: undefined
+Deep Link: teamIdなし - 標準permalinkを使用
+---
+
+テスト4 (Message Event のbody):
+TeamID: T0979H6R0H7
+Deep Link: slack://channel?team=T0979H6R0H7&id=C0979H6S0P8&message=1753404206.917869&tab=thread_ts
+---
+
+現在時刻: 2025-07-26T06:39:09.311Z
+テスト環境: Node.js v22.16.0

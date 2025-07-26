@@ -12,7 +12,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
   const prisma = getPrismaClient();
 
   // メッセージイベントハンドラー（ユーザー間メンション検出）
-  app.event('message', async ({ event, client }) => {
+  app.event('message', async ({ event, client, context, body }) => {
     // TypeScript型ガード
     if (!('text' in event) || !event.text) return;
     if (!('user' in event) || !event.user) return;
@@ -55,7 +55,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
 
         logger.info('Processing mention for user', {
           mentionedUserId,
-          messageTs: event.ts
+          messageTs: event.ts,
+          teamId: (body as any).team_id || (body as any).team?.id
         });
 
         // データベースにメンションを保存
@@ -129,7 +130,12 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         // UI生成（元のメッセージのmetadataを渡す）
         const blocks = uiBuilder.buildUI(analysis, event.text, {
           originalTs: event.ts,
-          channelId: event.channel
+          channelId: event.channel,
+          permalink: permalink,
+          // Socket ModeではイベントタイプによってteamIdの場所が異なる
+          // Message Event: body.team_id
+          // Block Actions: body.team.id
+          teamId: (body as any).team_id || (body as any).team?.id
         });
 
         // メンションされたユーザーに送信（チャンネル/DM対応）
@@ -140,7 +146,9 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
 
         logger.info('Quick reply sent to mentioned user', {
           mentionedUserId,
-          messageTs: event.ts
+          messageTs: event.ts,
+          teamId: (body as any).team_id || (body as any).team?.id,
+          hadPermalink: !!permalink
         });
       }
 
@@ -211,7 +219,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
   });
 
   // app_mentionイベントハンドラー（追加）
-  app.event('app_mention', async ({ event, client }) => {
+  app.event('app_mention', async ({ event, client, context, body }) => {
     // Bot自身の発言は無視
     if (event.user === BOT_USER_ID) return;
 
@@ -219,7 +227,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
       logger.info('Quick reply: Processing app_mention', {
         user: event.user,
         channel: event.channel,
-        text: event.text
+        text: event.text,
+        teamId: (body as any).team_id || (body as any).team?.id
       });
 
       // メッセージ分析
@@ -228,7 +237,12 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
       // UI生成（元のメッセージのmetadataを渡す）
       const blocks = uiBuilder.buildUI(analysis, event.text, {
         originalTs: event.ts,
-        channelId: event.channel
+        channelId: event.channel,
+        permalink: undefined, // app_mentionではpermalinkは必要ない
+        // Socket ModeではイベントタイプによってteamIdの場所が異なる
+        // Message Event: body.team_id
+        // Block Actions: body.team.id  
+        teamId: (body as any).team_id || (body as any).team?.id
       });
 
       // 送信（チャンネル/DM対応）
@@ -253,72 +267,8 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
     }
   });
 
-  // スレッド返信ジャンプアクション（追加）
-  app.action('thread_reply_jump', async ({ ack, body, client, action }) => {
-    await ack();
-
-    try {
-      const typedBody = body as any;
-      
-      // actionのvalueから元のメッセージのtimestampとchannelを取得
-      // 'thread_jump'の場合は旧形式なのでfallback
-      if (action.value === 'thread_jump') {
-        // 旧形式の場合はチャンネルリンクを提供
-        const channelLink = `slack://channel?team=${typedBody.team.id}&id=${typedBody.channel.id}`;
-        
-        await sendReply(client, getChannelId(body), getUserId(body), {
-          blocks: [{
-            type: 'section',
-            text: { type: 'mrkdwn', text: '🔗 チャンネルに移動:' },
-            accessory: {
-              type: 'button',
-              text: { type: 'plain_text', text: 'チャンネルを開く' },
-              url: channelLink
-            }
-          }],
-          text: '🔗 チャンネルに移動'
-        });
-        
-        logger.info('Channel link generated (fallback)', { channelLink });
-        return;
-      }
-      
-      const metadata = JSON.parse(action.value);
-      const { originalTs, channelId } = metadata;
-      
-      // chat.getPermalinkで元のメッセージのpermalinkを取得
-      const permalinkResult = await client.chat.getPermalink({
-        channel: channelId,
-        message_ts: originalTs
-      });
-
-      await sendReply(client, getChannelId(body), getUserId(body), {
-        blocks: [{
-          type: 'section',
-          text: { type: 'mrkdwn', text: '🔗 元のメッセージに移動:' },
-          accessory: {
-            type: 'button',
-            text: { type: 'plain_text', text: 'スレッドを開く' },
-            url: permalinkResult.permalink
-          }
-        }],
-        text: '🔗 元のメッセージに移動'
-      });
-
-      logger.info('Thread permalink generated', { 
-        permalink: permalinkResult.permalink,
-        originalTs,
-        channelId 
-      });
-
-    } catch (error) {
-      logger.error('Thread jump error:', error);
-      
-      await sendReply(client, getChannelId(body), getUserId(body), {
-        text: '❌ スレッドへのリンク生成に失敗しました。'
-      });
-    }
-  });
+  // thread_reply_jumpアクションハンドラーを削除
+  // 現在は全てpermalink URLボタンを使用して直接スレッドに飛ぶため不要
 
   logger.info('Quick Reply Handler configured', { BOT_USER_ID });
 }
