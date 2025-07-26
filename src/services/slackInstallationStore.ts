@@ -23,11 +23,14 @@ export class SlackInstallationStore {
         throw new Error('Installation missing team ID');
       }
 
+      // Handle null enterpriseId by using empty string for composite key
+      const enterpriseIdForKey = enterpriseId || '';
+
       await this.prisma.slackInstallation.upsert({
         where: {
           teamId_enterpriseId: {
             teamId,
-            enterpriseId
+            enterpriseId: enterpriseIdForKey
           }
         },
         update: {
@@ -39,7 +42,7 @@ export class SlackInstallationStore {
         },
         create: {
           teamId,
-          enterpriseId,
+          enterpriseId: enterpriseIdForKey,
           installData: JSON.stringify(installation),
           botToken: installation.bot?.token,
           botId: installation.bot?.id,
@@ -70,11 +73,14 @@ export class SlackInstallationStore {
         return undefined;
       }
 
+      // Handle null enterpriseId by using empty string for composite key
+      const enterpriseIdForKey = enterpriseId || '';
+
       const record = await this.prisma.slackInstallation.findUnique({
         where: {
           teamId_enterpriseId: {
             teamId,
-            enterpriseId: enterpriseId || null
+            enterpriseId: enterpriseIdForKey
           }
         }
       });
@@ -110,11 +116,14 @@ export class SlackInstallationStore {
         return;
       }
 
+      // Handle null enterpriseId by using empty string for composite key
+      const enterpriseIdForKey = enterpriseId || '';
+
       await this.prisma.slackInstallation.delete({
         where: {
           teamId_enterpriseId: {
             teamId,
-            enterpriseId: enterpriseId || null
+            enterpriseId: enterpriseIdForKey
           }
         }
       });

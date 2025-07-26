@@ -22,6 +22,15 @@ export default function initOAuth(expressApp: express.Application): void {
     const clientSecret = process.env.SLACK_CLIENT_SECRET;
     const stateSecret = process.env.SLACK_STATE_SECRET;
 
+    logger.info('OAuth environment variables check', {
+      hasClientId: !!clientId,
+      clientIdLength: clientId?.length || 0,
+      hasClientSecret: !!clientSecret,
+      clientSecretLength: clientSecret?.length || 0,
+      hasStateSecret: !!stateSecret,
+      stateSecretLength: stateSecret?.length || 0
+    });
+
     if (!clientId || !clientSecret || !stateSecret) {
       logger.warn('Slack OAuth credentials missing, skipping OAuth setup', {
         hasClientId: !!clientId,
@@ -48,7 +57,14 @@ export default function initOAuth(expressApp: express.Application): void {
           await slackInstallationStore.deleteInstallation(query);
         }
       },
-      scopes: [
+      installerOptions: {
+        redirectUriPath: '/slack/oauth/callback' // Explicit redirect URI path
+      },
+      installUrlOptions: {
+        redirectUri: process.env.SLACK_REDIRECT_URI!, // Required in newer versions
+        metadata: '', // Optional
+        userScopes: [], // Not using user tokens
+        scopes: [
         'app_mentions:read',
         'channels:history',
         'channels:read',
@@ -62,7 +78,8 @@ export default function initOAuth(expressApp: express.Application): void {
         'mpim:history',
         'mpim:read',
         'users:read'
-      ]
+        ]
+      }
     });
 
     // Set up OAuth routes
@@ -70,16 +87,52 @@ export default function initOAuth(expressApp: express.Application): void {
       try {
         await installer.handleInstallPath(req, res);
       } catch (error) {
-        logger.error('Slack OAuth start failed', { error });
+        logger.error('Slack OAuth start failed', { 
+          error,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorCode: (error as any)?.code
+        });
         res.status(500).send('OAuth initialization failed');
       }
     });
 
+    // Add both callback routes to handle different redirect paths
     expressApp.get('/slack/oauth/callback', async (req, res) => {
       try {
+        logger.info('OAuth callback received at /slack/oauth/callback', { 
+          query: req.query,
+          headers: req.headers.host
+        });
         await installer.handleCallback(req, res);
       } catch (error) {
-        logger.error('Slack OAuth callback failed', { error });
+        logger.error('Slack OAuth callback failed', { 
+          error,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorCode: (error as any)?.code,
+          query: req.query
+        });
+        res.status(500).send('OAuth callback failed');
+      }
+    });
+    
+    // Also handle /oauth/redirect (without /slack prefix)
+    expressApp.get('/oauth/redirect', async (req, res) => {
+      try {
+        logger.info('OAuth callback received at /oauth/redirect', { 
+          query: req.query,
+          headers: req.headers.host
+        });
+        await installer.handleCallback(req, res);
+      } catch (error) {
+        logger.error('Slack OAuth callback failed', { 
+          error,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorCode: (error as any)?.code,
+          query: req.query
+        });
         res.status(500).send('OAuth callback failed');
       }
     });

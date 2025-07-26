@@ -48,6 +48,7 @@
   - `project-standards.md` - 技術スタック・コード標準
 - **Claudeドキュメント**: `docs/claude/`
   - 索引: `DOCUMENT_INDEX.md`
+  - **新規**: `troubleshooting/oauth-common-errors.md` - OAuthエラー解決ガイド
 
 ## 📌 現在の状況（2025-07-26更新）
 
@@ -63,19 +64,24 @@
 | テスト | 状態 | 詳細 |
 |--------|------|------|
 | A-1: 既存Botトークン | ✅ 完了 | `/todo`コマンドが環境変数トークンで正常動作 |
-| A-2: OAuth新ワークスペース | 🔧 実装中 | ポート3000統合済み、最終確認前 |
+| A-2: OAuth新ワークスペース | 🔧 実装中 | OAuth認証成功、DB保存エラー対応中 |
 | A-3: 共存動作(Canary) | ⏳ 待機 | 環境変数とOAuthトークンの共存テスト |
 | A-4: トークン無効化 | ⏳ 待機 | Bot削除→エラー確認→再インストール |
 
 ### 直近の作業内容
-- **OAuth実装の修正と統合**
-  - ExpressReceiver設定の簡素化（src/app.ts:52-66行目）
-  - oauthIntegration.tsでInstallProviderを独立実装
-  - authorizeとOAuth installerの競合解決
-  - **ngrok転送先問題の解決**: OAuthルートをポート3000のExpressReceiverに統合
-    - 当初: OAuthはポート3100、ngrokはポート3000に転送
-    - 解決: receiver.appにOAuthルートを追加（src/app.ts:40-41行目）
-    - 結果: ngrok URLを変更せずにOAuth機能を使用可能
+- **OAuth Phase 1 A-2テスト実施（2025-07-26）**
+  - OAuth認証フロー成功: ユーザーが"Allow"クリック、Botトークン受信
+  - 複数のエラーを段階的に解決:
+    - InstallProviderのlogger互換性問題
+    - receiver変数のスコープ問題  
+    - HTTPサーバー起動問題（ポート指定）
+    - InstallURLOptions設定エラー
+    - OAuthコールバックURL不一致
+    - redirectUri必須パラメータ追加
+  - **現在の課題**: Prismaデータベースエラー（enterpriseId null問題）
+    - 複合ユニークキー`teamId_enterpriseId`がnullを扱えない
+    - インストールデータは正常に受信（teamId: TL2EU3JPP）
+  - 詳細: `docs/claude/work-reports/2025-07-26_oauth_phase1_test_report.md`
 
 - **/todoと/mentionコマンドの分離実装**
   - `/todo`からメンション表示を削除（src/routes/index.ts:485-543行目）
@@ -102,6 +108,9 @@
   - Bolt v3制約: clientId/clientSecret/installationStoreとauthorizeは同時指定不可
   - ExpressReceiverには基本設定のみ、OAuth設定はInstallProviderで分離
   - 環境変数トークンはフォールバック用として残す
+  - **新バージョンSlack OAuth**: redirectUriが必須パラメータに
+  - **Prismaスキーマ制約**: 複合ユニークキーでnull値を扱えない問題あり
+  - **よくあるエラー**: `docs/claude/troubleshooting/oauth-common-errors.md`参照
   - **アドバイスAI最新指摘事項（2025-07-26）**:
     - ポート3000統合で/apiと/slack/*が共存（CORS/bodyParser競合注意）
     - SLACK_STATE_SECRETはURL安全文字列推奨（英数字+-_）※現在64文字の安全な文字列を使用中
@@ -163,18 +172,12 @@ node scripts/test-thread-deep-link-simple.js
 
 ## 🎯 次の作業候補
 
-### OAuth Phase 1テスト継続（アドバイスAI最新版反映）
-1. **A-2テスト前の最終確認チェックリスト**:
-   - [ ] ポート3100の重複リッスン削除確認（src/app.tsで3000のみ使用）
-   - [ ] bodyParser設定確認（/apiのみ適用、/slack除外）
-   - [ ] SLACK_STATE_SECRET文字列安全性確認（64文字、英数字のみ）✅
-   - [ ] OAuth Redirect URLの一致確認（.envとコード両方で/slack/oauth/callback）
-   - [ ] authorize関数にデバッグログ追加（DB/ENV判別）
-   - [ ] ngrok URL設定箇所の3点確認（OAuth Redirect、Event Subscriptions、Interactivity）
-   - [ ] Prismaマイグレーション確認（SlackInstallationテーブル存在）
-   - [ ] InstallProviderのdirectInstall設定確認
-   - [ ] DEBUG=bolt:*環境変数でデバッグモード準備
-2. **A-2テスト実行**: OAuth新ワークスペースインストール確認
+### OAuth Phase 1テスト継続
+1. **A-2テストのDB保存エラー修正**:
+   - [ ] Prismaスキーマ確認（複合ユニークキー制約）
+   - [ ] SlackInstallationStore.tsでenterpriseId null処理追加
+   - [ ] DB保存成功後、`/help`コマンドで動作確認
+2. **A-2テスト完了**: OAuth新ワークスペースインストール確認
 3. **A-3テスト実行**: Canary共存動作テスト
    - `SLACK_OAUTH_ENABLED=true` + 環境変数トークン残し
    - 旧WS: `/todo`が環境変数トークンで動作
@@ -344,25 +347,39 @@ taskkill /PID <PID> /F
 
 ### 🚀 A-2テスト実行状況（2025-07-26 17:20）
 
-#### ✅ 事前確認完了
-1. **Bot Token Scopes**: 必要なスコープが設定済み（14個）
-2. **環境変数**: OAuthモード専念設定済み（BOTトークンはコメントアウト）
-3. **SLACK_STATE_SECRET**: 64文字の安全な文字列
+#### ✅ OAuth認証フロー成功
+- ユーザーが"Allow"をクリック
+- Botトークン受信: `xoxb-682504120805-9257602524080-HOOBYy3jqaBRVZj27QtvU6c2`
+- Team ID: TL2EU3JPP
 
-#### 🔧 実行時エラーと修正
-1. **エラー1**: `TypeError: this.logger.getLevel is not a function`
-   - **原因**: InstallProviderに`logger: console`を渡していたが互換性がない
-   - **修正**: oauthIntegration.ts:39行目の`logger: console`を削除
+#### 🔧 実行時エラーと修正（時系列順）
 
-2. **エラー2**: `ReferenceError: receiver is not defined`
-   - **原因**: receiver変数がifブロック内で定義されていたためスコープ外でアクセス不可
-   - **修正**: app.ts:18行目でreceiverをグローバルスコープに宣言
+##### 段階1: サーバー起動時のエラー
+1. **`this.logger.getLevel is not a function`**
+   - 修正: InstallProviderからlogger設定を削除（oauthIntegration.ts:48）
 
-3. **エラー3**: `ERR_NGROK_8012` - ngrokがlocalhost:3000に接続できない
-   - **原因**: app.start()にポート番号が指定されていなかった
-   - **修正**: app.ts:126行目を`app.start(config.server.port)`に変更
-   - **解説**: ExpressReceiverを使用する場合、app.start()にポート番号を指定する必要がある
-   - **状態**: 修正完了、再起動待ち
+2. **`receiver is not defined`**
+   - 修正: receiver変数をグローバルスコープで宣言（app.ts:19）
+
+##### 段階2: ngrok接続エラー
+3. **`ERR_NGROK_8012`**
+   - 修正: `app.start(config.server.port)`にポート指定（app.ts:107）
+
+##### 段階3: OAuth URL生成エラー
+4. **`slack_oauth_generate_url_error`**
+   - 修正: scopesをinstallUrlOptions内に移動（oauthIntegration.ts:63-82）
+
+##### 段階4: コールバック処理エラー
+5. **`Cannot GET /oauth/redirect`**
+   - 修正: 両方のパスを処理（oauthIntegration.ts:100-138）
+
+6. **`slack_oauth_unknown_error`**
+   - 修正: redirectUriを追加（oauthIntegration.ts:64）
+
+##### 段階5: データベース保存エラー（現在）
+7. **Prisma複合キーエラー**
+   - 状態: enterpriseId=nullで複合ユニークキー失敗
+   - 次の対応: SlackInstallationStore.tsの修正が必要
 
 #### 📋 テスト実行手順
 1. **サーバー再起動**
@@ -402,5 +419,19 @@ taskkill /PID <PID> /F
 2. Slackのリターンコード
 3. サーバーのスタックトレース
 
+## 📚 関連する重要ドキュメント
+
+### トラブルシューティング
+- [`docs/claude/troubleshooting/oauth-common-errors.md`](docs/claude/troubleshooting/oauth-common-errors.md)
+  - OAuthエラー早見表
+  - 問題解決フローチャート
+  - デバッグ方法
+
+### 作業レポート
+- [`docs/claude/work-reports/2025-07-26_oauth_phase1_test_report.md`](docs/claude/work-reports/2025-07-26_oauth_phase1_test_report.md)
+  - A-2テスト実施詳細
+  - エラーパターンと根本原因
+  - 実装時のチェックリスト
+
 ---
-*最終更新: 2025-07-26 by Claude Code*
+*最終更新: 2025-07-26 17:30 by Claude Code*
