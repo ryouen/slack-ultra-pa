@@ -104,7 +104,7 @@ async function startApp() {
     });
 
     // Start Slack app
-    await app.start();
+    await app.start(config.server.port);
     logger.info(`Slack app is running on port ${config.server.port}`);
 
     // OAuth routes are now setup on receiver's express app (port 3000)

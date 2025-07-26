@@ -357,6 +357,11 @@ taskkill /PID <PID> /F
 2. **エラー2**: `ReferenceError: receiver is not defined`
    - **原因**: receiver変数がifブロック内で定義されていたためスコープ外でアクセス不可
    - **修正**: app.ts:18行目でreceiverをグローバルスコープに宣言
+
+3. **エラー3**: `ERR_NGROK_8012` - ngrokがlocalhost:3000に接続できない
+   - **原因**: app.start()にポート番号が指定されていなかった
+   - **修正**: app.ts:126行目を`app.start(config.server.port)`に変更
+   - **解説**: ExpressReceiverを使用する場合、app.start()にポート番号を指定する必要がある
    - **状態**: 修正完了、再起動待ち
 
 #### 📋 テスト実行手順
