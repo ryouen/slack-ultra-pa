@@ -10,7 +10,8 @@ export enum JobType {
   WEEKLY_REPORT = 'weekly_report',
   CALENDAR_SYNC = 'calendar_sync',
   EMAIL_NOTIFICATION = 'email_notification',
-  CLEANUP = 'cleanup'
+  CLEANUP = 'cleanup',
+  TOKEN_HEALTH_CHECK = 'token_health_check'
 }
 
 // Job Data Interfaces
@@ -41,7 +42,12 @@ export interface CleanupJobData {
   olderThan: Date;
 }
 
-export type JobData = ReminderJobData | ReportJobData | CalendarSyncJobData | CleanupJobData;
+export interface TokenHealthCheckJobData {
+  checkType: 'all' | 'team';
+  teamId?: string;
+}
+
+export type JobData = ReminderJobData | ReportJobData | CalendarSyncJobData | CleanupJobData | TokenHealthCheckJobData;
 
 /**
  * Job Queue Service
@@ -150,6 +156,14 @@ export class JobQueueService {
       workerOptions
     );
     this.workers.set(JobType.CLEANUP, cleanupWorker);
+
+    // Token health check worker
+    const tokenHealthCheckWorker = new Worker(
+      JobType.TOKEN_HEALTH_CHECK,
+      this.processTokenHealthCheckJob.bind(this),
+      workerOptions
+    );
+    this.workers.set(JobType.TOKEN_HEALTH_CHECK, tokenHealthCheckWorker);
 
     // Add error handlers
     this.workers.forEach((worker, jobType) => {
@@ -288,6 +302,11 @@ export class JobQueueService {
       olderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago
     }, '0 3 * * 0');
 
+    // Token health check every 10 minutes
+    await this.scheduleTokenHealthCheck({
+      checkType: 'all'
+    }, '*/10 * * * *');
+
     logger.info('Recurring jobs scheduled');
   }
 
@@ -303,6 +322,23 @@ export class JobQueueService {
     const job = await queue.add(JobType.CLEANUP, data, {
       repeat: { pattern: cronExpression },
       jobId: `cleanup-${data.targetType}`,
+    });
+
+    return job.id!;
+  }
+
+  /**
+   * Schedule token health check job
+   */
+  private async scheduleTokenHealthCheck(data: TokenHealthCheckJobData, cronExpression: string): Promise<string> {
+    const queue = this.queues.get(JobType.TOKEN_HEALTH_CHECK);
+    if (!queue) {
+      throw new Error('Token health check queue not initialized');
+    }
+
+    const job = await queue.add(JobType.TOKEN_HEALTH_CHECK, data, {
+      repeat: { pattern: cronExpression },
+      jobId: `token-health-check-${data.checkType}`,
     });
 
     return job.id!;
@@ -445,6 +481,102 @@ export class JobQueueService {
       logger.error('Cleanup job failed', { 
         jobId: job.id, 
         targetType, 
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Process token health check job
+   */
+  private async processTokenHealthCheckJob(job: Job<TokenHealthCheckJobData>): Promise<void> {
+    const { checkType, teamId } = job.data;
+
+    try {
+      logger.info('Processing token health check job', { 
+        jobId: job.id, 
+        checkType,
+        teamId 
+      });
+
+      const { slackInstallationStore } = await import('@/services/slackInstallationStore');
+      const { WebClient } = await import('@slack/web-api');
+      const { getPrismaClient } = await import('@/config/database');
+      
+      const prisma = getPrismaClient();
+      let checkedCount = 0;
+      let invalidCount = 0;
+
+      if (checkType === 'all') {
+        const installations = await prisma.slackInstallation.findMany({
+          select: {
+            teamId: true,
+            botToken: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        });
+
+        for (const installation of installations) {
+          checkedCount++;
+          try {
+            const client = new WebClient(installation.botToken);
+            await client.auth.test();
+            logger.debug(`Token valid for team ${installation.teamId}`);
+          } catch (error: any) {
+            if (error.data?.error === 'invalid_auth') {
+              invalidCount++;
+              logger.warn(`Invalid token detected for team ${installation.teamId}`);
+              
+              await slackInstallationStore.deleteInstallation({
+                teamId: installation.teamId,
+                enterpriseId: undefined
+              });
+              
+              logger.info(`Deleted invalid installation for team ${installation.teamId}`);
+            } else {
+              logger.error(`Error checking token for team ${installation.teamId}`, { error });
+            }
+          }
+        }
+      } else if (checkType === 'team' && teamId) {
+        // Check specific team
+        const installation = await prisma.slackInstallation.findFirst({
+          where: { teamId }
+        });
+
+        if (installation) {
+          checkedCount = 1;
+          try {
+            const client = new WebClient(installation.botToken);
+            await client.auth.test();
+            logger.debug(`Token valid for team ${teamId}`);
+          } catch (error: any) {
+            if (error.data?.error === 'invalid_auth') {
+              invalidCount = 1;
+              logger.warn(`Invalid token detected for team ${teamId}`);
+              
+              await slackInstallationStore.deleteInstallation({
+                teamId,
+                enterpriseId: undefined
+              });
+              
+              logger.info(`Deleted invalid installation for team ${teamId}`);
+            }
+          }
+        }
+      }
+      
+      logger.info('Token health check completed', { 
+        jobId: job.id,
+        checked: checkedCount,
+        invalid: invalidCount
+      });
+    } catch (error) {
+      logger.error('Token health check job failed', { 
+        jobId: job.id,
+        checkType,
         error: error instanceof Error ? error.message : String(error)
       });
       throw error;

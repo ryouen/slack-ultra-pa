@@ -9,8 +9,8 @@ datasource db {
 
 model SlackInstallation {
   id           String   @id @default(cuid())
-  teamId       String?
-  enterpriseId String?
+  teamId       String
+  enterpriseId String   @default("")
   installData  String
   botToken     String?
   botId        String?

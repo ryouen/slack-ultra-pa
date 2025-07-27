@@ -542,6 +542,118 @@ interface ProgressUpdate {
 
 ---
 
+## Phase 2: OAuth Dynamic Token Management / Phase 2: OAuth動的トークン管理
+
+### Runtime Auth Flow Enhancement / ランタイム認証フロー強化
+
+```mermaid
+sequenceDiagram
+    participant A as Any Service
+    participant U as getSlackClient Util
+    participant C as LRU Cache
+    participant S as SlackInstallationStore
+    participant W as WebClient
+    
+    A->>U: getSlackClient(teamId)
+    U->>C: Check cache for teamId
+    
+    alt Cache Hit
+        C-->>U: Return cached AuthorizeResult
+        U->>W: Create WebClient with cached token
+        W-->>A: Return authenticated client
+    else Cache Miss
+        U->>S: fetchInstallation(teamId)
+        alt Installation Found
+            S-->>U: Return OAuth installation
+            U->>C: Cache AuthorizeResult (10min TTL)
+            U->>W: Create WebClient with OAuth token
+            W-->>A: Return authenticated client
+        else Installation Not Found
+            U->>U: Fallback to env token
+            U->>C: Cache env AuthorizeResult
+            U->>W: Create WebClient with env token
+            W-->>A: Return authenticated client
+        end
+    end
+    
+    Note over A,W: On invalid_auth error
+    A->>U: Handle invalid_auth
+    U->>C: Delete cache entry
+    U->>S: Delete invalid installation
+    U-->>A: Throw re-installation error
+```
+
+### Core Utility Implementation / コアユーティリティ実装
+
+```typescript
+// Phase 2 Addition: Dynamic Token Resolution Utility
+interface SlackClientUtil {
+  // Primary method for all Slack API access
+  getSlackClient(teamId: string): Promise<WebClient>
+  
+  // Cache management
+  clearCache(teamId?: string): void
+  getCacheStats(): CacheStats
+  
+  // Error recovery
+  handleInvalidAuth(teamId: string): Promise<void>
+}
+
+// LRU Cache Configuration
+interface AuthCacheConfig {
+  max: 500                    // Maximum 500 teams
+  ttl: 10 * 60 * 1000        // 10 minutes TTL
+  updateAgeOnGet: true        // Reset TTL on access
+  dispose: (value: AuthorizeResult, key: string) => void
+}
+
+// Enhanced Worker Configuration
+interface WorkerConfig {
+  connection: Redis
+  reuseRedis: true           // Critical for BullMQ v4.7+
+  limiter: {
+    max: 50                  // Rate limit: 50 jobs per minute
+    duration: 60000
+  }
+}
+```
+
+### Performance Characteristics / パフォーマンス特性
+
+| Metric / メトリクス | Target / 目標 | Monitoring / 監視 |
+|---|---|---|
+| Cache Hit Rate | >90% | auth_cache_hit_rate |
+| API Latency P95 | <200ms | api_latency_p95 |
+| Worker Queue Depth | <1000 | worker_queue_depth |
+| Error Rate | <0.1% | error_rate |
+| Memory Usage | <100MB for cache | auth_cache_memory_usage |
+
+### Error Handling Strategy / エラーハンドリング戦略
+
+```typescript
+// Phase 2 Addition: Comprehensive Error Recovery
+class AuthErrorHandler {
+  async handleInvalidAuth(teamId: string): Promise<void> {
+    // 1. Clear cache
+    authCache.delete(teamId);
+    
+    // 2. Delete invalid installation
+    await slackInstallationStore.deleteInstallation({ teamId });
+    
+    // 3. Log for monitoring
+    logger.error('Invalid auth detected', { teamId });
+    
+    // 4. Notify user for re-installation
+    await this.sendReinstallationNotice(teamId);
+  }
+  
+  private async sendReinstallationNotice(teamId: string): Promise<void> {
+    // User-friendly re-installation guidance
+    // Include direct link to /slack/install
+  }
+}
+```
+
 ## Implementation Phases / 実装フェーズ
 
 ### Phase 1: MVP Core (6 weeks = 3 × 2-week sprints)

@@ -83,55 +83,68 @@ export async function setupRoutes(app: App): Promise<void> {
   });
 
   // Enhanced help command with multi-language support
-  app.command('/help', async ({ command, ack, respond }) => {
+  app.command('/help', async ({ command, ack, respond, context }) => {
     await ack();
 
-    logger.info('Help command received', {
-      userId: command.user_id,
-      channelId: command.channel_id,
-    });
+    try {
+      logger.info('Help command received', {
+        userId: command.user_id,
+        channelId: command.channel_id,
+      });
 
-    // Detect language from command text or default to Japanese
-    const language = command.text ? detectLanguage(command.text) : 'ja';
+      // Detect language from command text or default to Japanese
+      const language = command.text ? detectLanguage(command.text) : 'ja';
 
-    await respond({
-      text: t('help.title', language),
-      blocks: [
-        {
-          type: 'header',
-          text: {
-            type: 'plain_text',
-            text: t('help.title', language),
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: t('help.description', language),
-          },
-        },
-        {
-          type: 'divider',
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*${language === 'ja' ? '利用可能なコマンド' : 'Available Commands'}:*\n• ${t('help.commands.help', language)}\n• ${t('help.commands.todo', language)}\n• ${t('help.commands.lang', language)}\n• ${t('help.commands.prep', language)}\n• ${t('help.commands.focus', language)}`,
-          },
-        },
-        {
-          type: 'context',
-          elements: [
-            {
-              type: 'mrkdwn',
-              text: t('help.tip', language),
+      await respond({
+        text: t('help.title', language),
+        blocks: [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: t('help.title', language),
             },
-          ],
-        },
-      ],
-    });
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: t('help.description', language),
+            },
+          },
+          {
+            type: 'divider',
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*${language === 'ja' ? '利用可能なコマンド' : 'Available Commands'}:*\n• ${t('help.commands.help', language)}\n• ${t('help.commands.todo', language)}\n• ${t('help.commands.lang', language)}\n• ${t('help.commands.prep', language)}\n• ${t('help.commands.focus', language)}`,
+            },
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: t('help.tip', language),
+              },
+            ],
+          },
+        ],
+      });
+    } catch (error: any) {
+      logger.error('Error in help command', { error, userId: command.user_id });
+      
+      const { handleSlackAuthError, getInstallUrl } = await import('@/utils/slackErrorHandler');
+      await handleSlackAuthError(error, {
+        respond,
+        userId: command.user_id,
+        teamId: command.team_id,
+        isOAuthEnabled,
+        installUrl: getInstallUrl()
+      });
+    }
   });
 
   // Language switching command

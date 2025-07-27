@@ -50,38 +50,50 @@
   - 索引: `DOCUMENT_INDEX.md`
   - **新規**: `troubleshooting/oauth-common-errors.md` - OAuthエラー解決ガイド
 
-## 📌 現在の状況（2025-07-26更新）
+## 📌 現在の状況（2025-07-27 14:20更新）
 
-### 🧪 OAuth Phase 1テスト実行中
+### ✅ OAuth Phase 1テスト完了
 - **o3-proによるテスト計画**: 段階的OAuth移行のための包括的テスト
-- **進捗**: A-1テスト完了、A-2テスト実装修正中
+- **進捗**: 全テスト（A-1〜A-4）完了
+- **成果**: OAuth認証と環境変数認証の共存動作確認、トークン失効時の自動復旧実装
 - **アドバイスAIからの最新指摘**: 
   - Bolt v3制約（clientId/clientSecret/installationStoreとauthorizeの排他性）は理解済み
   - ポート3000統合アプローチを採用（ngrok URL変更回避のため）
   - 追加のチェックポイントを確認中
+- **Prismaスキーマ修正完了**: enterpriseId null問題を解決（デフォルト空文字列）
 
 #### テスト進捗状況
 | テスト | 状態 | 詳細 |
 |--------|------|------|
 | A-1: 既存Botトークン | ✅ 完了 | `/todo`コマンドが環境変数トークンで正常動作 |
-| A-2: OAuth新ワークスペース | 🔧 実装中 | OAuth認証成功、DB保存エラー対応中 |
-| A-3: 共存動作(Canary) | ⏳ 待機 | 環境変数とOAuthトークンの共存テスト |
-| A-4: トークン無効化 | ⏳ 待機 | Bot削除→エラー確認→再インストール |
+| A-2: OAuth新ワークスペース | ✅ 完了 | OAuth認証成功、DB保存成功、`/help`動作確認 |
+| A-3: 共存動作(Canary) | ✅ 完了 | 優先順位とフォールバック動作確認（変形版） |
+| A-4: トークン無効化 | ✅ 完了 | エラー検出→再インストール→復旧確認 |
 
 ### 直近の作業内容
+- **OAuth Phase 1完了（2025-07-27）**
+  - 全テスト（A-1〜A-4）成功
+  - グローバルエラーハンドラー実装
+  - トークン健康チェックジョブ（10分間隔）実装
+  - ユーザーフレンドリーなエラーメッセージ実装
+  - 詳細: `docs/claude/work-reports/2025-07-27_oauth_phase1_completion_report.md`
+
 - **OAuth Phase 1 A-2テスト実施（2025-07-26）**
   - OAuth認証フロー成功: ユーザーが"Allow"クリック、Botトークン受信
   - 複数のエラーを段階的に解決:
-    - InstallProviderのlogger互換性問題
-    - receiver変数のスコープ問題  
-    - HTTPサーバー起動問題（ポート指定）
-    - InstallURLOptions設定エラー
-    - OAuthコールバックURL不一致
-    - redirectUri必須パラメータ追加
-  - **現在の課題**: Prismaデータベースエラー（enterpriseId null問題）
-    - 複合ユニークキー`teamId_enterpriseId`がnullを扱えない
-    - インストールデータは正常に受信（teamId: TL2EU3JPP）
-  - 詳細: `docs/claude/work-reports/2025-07-26_oauth_phase1_test_report.md`
+    - InstallProviderのlogger互換性問題 ✅
+    - receiver変数のスコープ問題 ✅
+    - HTTPサーバー起動問題（ポート指定）✅
+    - InstallURLOptions設定エラー ✅
+    - OAuthコールバックURL不一致 ✅
+    - redirectUri必須パラメータ追加 ✅
+    - **Prismaデータベースエラー修正完了（2025-07-26 17:50）**✅
+      - 複合ユニークキー`teamId_enterpriseId`がnullを扱えない問題を解決
+      - Prismaスキーマ修正: enterpriseIdデフォルト空文字列
+      - マイグレーション実行済み
+  - 詳細: 
+    - `docs/claude/work-reports/2025-07-26_oauth_phase1_test_report.md`
+    - `docs/claude/work-reports/2025-07-26_oauth_phase1_a2_fix_report.md`
 
 - **/todoと/mentionコマンドの分離実装**
   - `/todo`からメンション表示を削除（src/routes/index.ts:485-543行目）
@@ -289,9 +301,31 @@ netstat -ano | findstr :3100
 taskkill /PID <PID> /F
 ```
 
-## 🎯 現在の作業状況（2025-07-26 17:00更新）
+## 🎯 現在の作業状況（2025-07-26 18:30更新）
 
-### ✅ A-2テスト前の最終確認チェックリスト完了
+### 🚧 A-3 Canaryテスト: ブロッカーあり
+
+#### 問題点
+**旧ワークスペースの認証情報が不足**
+- A-3テストの目的: OAuth認証と環境変数トークンの共存動作確認
+- 現在の状況:
+  - DB: 新ワークスペース（TL2EU3JPP）の認証情報が保存済み
+  - .env: Botトークンがコメントアウトされている（これは新WSのもの）
+  - 必要: 別の旧ワークスペースの認証情報
+
+#### 必要な環境変数
+```
+SLACK_BOT_TOKEN=xoxb-旧ワークスペースのトークン
+SLACK_BOT_ID=B旧ワークスペースのBOT_ID
+SLACK_BOT_USER_ID=U旧ワークスペースのBOT_USER_ID
+```
+
+#### 次のステップ
+1. 旧ワークスペースの認証情報を取得
+2. .envに追加
+3. A-3テストを実行
+
+### ✅ A-2テスト完了（2025-07-26 18:00）
 
 #### 実施結果サマリ
 1. **ポート3100の重複リッスン削除** ✅
@@ -345,7 +379,7 @@ taskkill /PID <PID> /F
    - InstallProviderのdirectInstall設定確認 → 確認予定
    - ポート3100の完全な削除確認 → 完了
 
-### 🚀 A-2テスト実行状況（2025-07-26 17:20）
+### 🚀 A-2テスト実行状況（2025-07-26 17:50更新）
 
 #### ✅ OAuth認証フロー成功
 - ユーザーが"Allow"をクリック
@@ -376,10 +410,11 @@ taskkill /PID <PID> /F
 6. **`slack_oauth_unknown_error`**
    - 修正: redirectUriを追加（oauthIntegration.ts:64）
 
-##### 段階5: データベース保存エラー（現在）
+##### 段階5: データベース保存エラー（修正完了）
 7. **Prisma複合キーエラー**
-   - 状態: enterpriseId=nullで複合ユニークキー失敗
-   - 次の対応: SlackInstallationStore.tsの修正が必要
+   - 問題: enterpriseId=nullで複合ユニークキー失敗
+   - 解決: Prismaスキーマ修正（enterpriseId デフォルト空文字列）
+   - マイグレーション: `20250726174308_fix_slack_installation_enterprise_id`実行済み
 
 #### 📋 テスト実行手順
 1. **サーバー再起動**
@@ -434,4 +469,13 @@ taskkill /PID <PID> /F
   - 実装時のチェックリスト
 
 ---
-*最終更新: 2025-07-26 17:30 by Claude Code*
+*最終更新: 2025-07-27 14:20 by Claude Code*
+
+## 📝 ドキュメンテーション方針（重要）
+> 適宜、ドキュメンテーションも怠らないようにお願いします。あなたが落ちてしまって再起動した際や、Kiroに対して、状況がよくわかるようにドキュメンテーションをしてください。未来の自分を助けるドキュメンテーションです。
+
+この指示に従い、以下の原則でドキュメントを作成・維持します：
+- **作業レポート**: 各タスク完了時に詳細な作業記録を作成
+- **CLAUDE.md**: セッション引き継ぎの中心的ドキュメントとして常に最新化
+- **エラー解決記録**: 遭遇したエラーと解決策を体系的に記録
+- **技術的決定**: なぜその実装を選んだかの理由を明記

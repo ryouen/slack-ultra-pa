@@ -37,17 +37,97 @@
     - Foreign key relationships properly defined
 
 - [x] 3. OAuth Token Management System / OAuthトークン管理システム
-
-
-
-
-
-
-
   - Implement secure OAuth token storage, refresh, and management for external APIs
   - **Estimated Hours:** 16
   - **Requirements:** Requirement 3, Cross-platform integration
   - **Blocked by:** Task 2
+
+## Phase 2: OAuth Dynamic Token Management (Weeks 7-10) / Phase 2: OAuth動的トークン管理
+**Phase 2 Total Hours:** 80 hours
+
+- [ ] P2-1. getSlackClient Utility Implementation / getSlackClientユーティリティ実装
+  - Create dynamic token resolution utility with LRU caching and fallback mechanisms
+  - **Estimated Hours:** 20
+  - **Requirements:** Requirement 10
+  - **Phase:** 2
+  - **Deliverables:**
+    - `src/utils/getSlackClient.ts` with LRU cache (lru-cache package)
+    - OAuth installation → WebClient resolution logic
+    - Environment token fallback for backward compatibility
+    - Cache statistics and monitoring hooks
+  - **Acceptance Criteria:**
+    - Cache hit rate >90% under normal load
+    - Fallback to env token when OAuth installation not found
+    - Automatic cache invalidation on invalid_auth errors
+    - Memory usage <100MB for 500 cached teams
+
+- [ ] P2-2. Quick-Reply Feature Re-enablement / Quick-Reply機能再有効化
+  - Restore Quick-Reply functionality with dynamic botUserId resolution
+  - **Estimated Hours:** 16
+  - **Requirements:** Requirement 2.5 (Updated)
+  - **Phase:** 2
+  - **Blocked by:** P2-1
+  - **Deliverables:**
+    - Update `src/handlers/quickReplyHandler.ts` to use getSlackClient
+    - Dynamic botUserId resolution from installation data
+    - Remove static BOT_USER_ID dependency
+    - Comprehensive testing for multi-workspace scenarios
+  - **Acceptance Criteria:**
+    - Quick-Reply works across all OAuth installations
+    - No hardcoded botUserId references remain
+    - Graceful handling when botUserId cannot be resolved
+    - Maintains <5 second response time target
+
+- [ ] P2-3. Worker Gradual Migration / Worker段階的移行
+  - Migrate BullMQ workers to use dynamic token resolution
+  - **Estimated Hours:** 24
+  - **Requirements:** Requirement 10
+  - **Phase:** 2
+  - **Blocked by:** P2-1
+  - **Deliverables:**
+    - Update reminder worker to use getSlackClient
+    - Update report generation workers
+    - Implement reuseRedis configuration for BullMQ v4.7+
+    - Add rate limiting and error recovery
+  - **Acceptance Criteria:**
+    - All workers use team-specific tokens
+    - Automatic retry on invalid_auth with exponential backoff
+    - Queue depth remains <1000 under normal load
+    - Worker error rate <0.1%
+
+- [ ] P2-4. Performance Optimization & Monitoring / パフォーマンス最適化と監視
+  - Implement comprehensive monitoring and performance tuning
+  - **Estimated Hours:** 12
+  - **Requirements:** Requirement 10
+  - **Phase:** 2
+  - **Blocked by:** P2-1, P2-2, P2-3
+  - **Deliverables:**
+    - Prometheus metrics for cache performance
+    - Memory leak detection and prevention
+    - Performance benchmarking suite
+    - Alerting configuration for critical metrics
+  - **Acceptance Criteria:**
+    - All Phase 2 performance targets met
+    - Automated alerts for cache hit rate <70%
+    - Memory usage monitoring with leak detection
+    - API latency P95 <200ms maintained
+
+- [ ] P2-5. Error Handling & User Experience / エラーハンドリングとユーザー体験
+  - Implement comprehensive error recovery and user guidance
+  - **Estimated Hours:** 8
+  - **Requirements:** Requirement 10
+  - **Phase:** 2
+  - **Blocked by:** P2-1
+  - **Deliverables:**
+    - Automatic invalid installation cleanup
+    - User-friendly re-installation guidance
+    - Error logging and monitoring integration
+    - Graceful degradation strategies
+  - **Acceptance Criteria:**
+    - Users receive clear guidance on token expiration
+    - Invalid installations automatically cleaned up
+    - No user-facing errors without actionable guidance
+    - All errors properly logged for debugging
   - **Deliverables:**
     - src/services/oauthService.ts
     - Token refresh middleware

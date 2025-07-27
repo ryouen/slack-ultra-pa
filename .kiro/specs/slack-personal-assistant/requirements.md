@@ -344,6 +344,39 @@ function calculateDue(type, dates?) {
 
 
 
+## Phase 2 Requirements / Phase 2要件 (OAuth Dynamic Token Management)
+
+### Requirement 10: OAuth Dynamic Token Management / OAuth動的トークン管理 _(Phase 2)_
+**Score: Impact(5) + Effort(4) + Differentiation(3) + Demo(3) = 15**
+<!-- Impact: 最高 - 全機能のマルチワークスペース対応 | Effort: 高い - 動的認証・キャッシュ実装 | Differentiation: 中程度 - OAuth対応は一般的 | Demo: 中程度 - 技術的改善 -->
+
+**User Story / ユーザーストーリー:** As a system, I want to dynamically resolve bot tokens for each workspace installation, so that all features work seamlessly across multiple OAuth installations with optimal performance.
+システムとして、各ワークスペースインストールのボットトークンを動的に解決し、複数のOAuthインストール間で最適なパフォーマンスですべての機能がシームレスに動作するようにしたい。
+
+#### Acceptance Criteria / 受け入れ基準
+1. **GIVEN** any Slack API call is needed **WHEN** getSlackClient() utility is called **THEN** the system SHALL resolve the appropriate bot token from OAuth installation store or fallback to environment token with LRU caching (10min TTL, 500 teams max)
+   **前提条件** Slack API呼び出しが必要 **条件** getSlackClient()ユーティリティが呼ばれた時 **結果** システムはOAuthインストールストアから適切なボットトークンを解決するか、LRUキャッシュ（10分TTL、最大500チーム）付きで環境変数トークンにフォールバックする
+
+2. **GIVEN** Quick-Reply feature is triggered **WHEN** bot mentions are detected **THEN** the system SHALL dynamically resolve botUserId from the installation data and re-enable full Quick-Reply functionality
+   **前提条件** Quick-Reply機能がトリガーされる **条件** ボットメンションが検出された時 **結果** システムはインストールデータからbotUserIdを動的に解決し、完全なQuick-Reply機能を再有効化する
+
+3. **GIVEN** Worker jobs need Slack API access **WHEN** processing reminder/report jobs **THEN** the system SHALL use team-specific tokens with automatic retry on invalid_auth errors and graceful degradation
+   **前提条件** WorkerジョブがSlack APIアクセスを必要とする **条件** リマインダー/レポートジョブを処理する時 **結果** システムはinvalid_authエラー時の自動リトライと段階的劣化機能付きでチーム固有トークンを使用する
+
+4. **GIVEN** auth cache experiences memory pressure **WHEN** cache size approaches limits **THEN** the system SHALL implement LRU eviction with dispose handlers for proper resource cleanup and memory leak prevention
+   **前提条件** 認証キャッシュがメモリ圧迫を経験する **条件** キャッシュサイズが制限に近づいた時 **結果** システムは適切なリソースクリーンアップとメモリリーク防止のためのdisposeハンドラー付きLRU削除を実装する
+
+5. **GIVEN** invalid tokens are detected **WHEN** Slack API returns invalid_auth **THEN** the system SHALL automatically delete invalid installation records, clear cache entries, and provide user-friendly re-installation guidance
+   **前提条件** 無効なトークンが検出される **条件** Slack APIがinvalid_authを返した時 **結果** システムは無効なインストールレコードを自動削除し、キャッシュエントリをクリアし、ユーザーフレンドリーな再インストールガイダンスを提供する
+
+### Requirement 2.5 Update: Quick Reply & /mention System Re-enablement / Quick Reply & /mention システム再有効化 _(Phase 2)_
+**Status: ENABLED (Phase 2) - Previously disabled due to botUserId resolution issues**
+**ステータス: 有効化（Phase 2） - 以前はbotUserId解決問題により無効化**
+
+#### Updated Acceptance Criteria / 更新された受け入れ基準
+7.1. **GIVEN** system processes mention **WHEN** botUserId is required **THEN** the system SHALL dynamically resolve botUserId from OAuth installation data using getSlackClient utility instead of static environment variable
+   **前提条件** システムがメンションを処理 **条件** botUserIdが必要な時 **結果** システムは静的環境変数の代わりにgetSlackClientユーティリティを使用してOAuthインストールデータからbotUserIdを動的に解決する
+
 ## Future Requirements / 将来要件 (≤7 points)
 
 ### Requirement 8: Voice-to-Action Processing / 音声からアクション処理

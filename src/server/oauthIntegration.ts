@@ -28,7 +28,8 @@ export default function initOAuth(expressApp: express.Application): void {
       hasClientSecret: !!clientSecret,
       clientSecretLength: clientSecret?.length || 0,
       hasStateSecret: !!stateSecret,
-      stateSecretLength: stateSecret?.length || 0
+      stateSecretLength: stateSecret?.length || 0,
+      redirectUri: process.env.SLACK_REDIRECT_URI
     });
 
     if (!clientId || !clientSecret || !stateSecret) {
