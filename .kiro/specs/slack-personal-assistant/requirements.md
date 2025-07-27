@@ -10,6 +10,12 @@ priority_thresholds:
   mvp: "≥12 total points"
   booster: "8-11 total points"
   future: "≤7 total points"
+phases:
+  phase_1: "OAuth基盤構築完了"
+  phase_2: "動的トークン管理・Quick-Reply復活"
+  phase_3: "高度機能・最適化"
+current_phase: 2
+phase_2_requirements: ["R10", "R2.5_updated"]
 ---
 
 # Requirements Document / 要件定義書

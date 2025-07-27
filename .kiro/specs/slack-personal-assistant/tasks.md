@@ -43,7 +43,21 @@
   - **Blocked by:** Task 2
 
 ## Phase 2: OAuth Dynamic Token Management (Weeks 7-10) / Phase 2: OAuth動的トークン管理
-**Phase 2 Total Hours:** 80 hours
+**Phase 2 Total Hours:** 84 hours
+
+- [ ] P2-0. Dependency Upgrade / 依存関係アップグレード
+  - Upgrade BullMQ to v4.7+ for reuseRedis support and update related configurations
+  - **Estimated Hours:** 4
+  - **Requirements:** Requirement 10 (prerequisite)
+  - **Phase:** 2
+  - **Deliverables:**
+    - package.json update: `bullmq@^4.7.0`
+    - Update worker configurations with reuseRedis: true
+    - Verify Redis connection pooling works correctly
+  - **Exit Criteria:**
+    - All existing workers function without errors
+    - Redis connection count remains stable
+    - No breaking changes in job processing
 
 - [ ] P2-1. getSlackClient Utility Implementation / getSlackClientユーティリティ実装
   - Create dynamic token resolution utility with LRU caching and fallback mechanisms
@@ -55,11 +69,17 @@
     - OAuth installation → WebClient resolution logic
     - Environment token fallback for backward compatibility
     - Cache statistics and monitoring hooks
-  - **Acceptance Criteria:**
-    - Cache hit rate >90% under normal load
-    - Fallback to env token when OAuth installation not found
-    - Automatic cache invalidation on invalid_auth errors
-    - Memory usage <100MB for 500 cached teams
+  - **Exit Criteria:**
+    - `auth_cache_hit_rate ≥ 90%` under normal load (Prometheus metric)
+    - `api_latency_p95 < 200ms` for getSlackClient calls (OTEL → Jaeger)
+    - Memory usage `auth_cache_memory_usage < 100MB` (process.memoryUsage())
+    - Zero invalid_auth errors during 24h canary test (application logs)
+    - `redis_connected_clients ≤ 30` after reuseRedis implementation
+  - **Dependencies:** BullMQ upgrade to v4.7+ for reuseRedis support
+  - **Verification Method:** 
+    - Run `npm run test:performance` 
+    - Check Grafana dashboard "Phase 2 Metrics"
+    - Verify package-lock.json diff shows bullmq@^4.7.0
 
 - [ ] P2-2. Quick-Reply Feature Re-enablement / Quick-Reply機能再有効化
   - Restore Quick-Reply functionality with dynamic botUserId resolution

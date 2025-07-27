@@ -50,7 +50,7 @@
   - 索引: `DOCUMENT_INDEX.md`
   - **新規**: `troubleshooting/oauth-common-errors.md` - OAuthエラー解決ガイド
 
-## 📌 現在の状況（2025-07-27 14:20更新）
+## 📌 現在の状況（2025-07-27 20:00更新）
 
 ### ✅ OAuth Phase 1テスト完了
 - **o3-proによるテスト計画**: 段階的OAuth移行のための包括的テスト
@@ -71,6 +71,26 @@
 | A-4: トークン無効化 | ✅ 完了 | エラー検出→再インストール→復旧確認 |
 
 ### 直近の作業内容
+- **Phase 2実装進行中（2025-07-27）**
+  - P2-0: BullMQ v5最適化完了
+    - QueueScheduler/QueueEvents実装
+    - Redis接続監視（30秒間隔）
+    - Rate Limiter設定（59 req/分）
+  - P2-1: getSlackClient Utility完了
+    - LRUキャッシュ（500チーム、10分TTL）実装
+    - Prometheusメトリクス統合
+    - パフォーマンステスト作成
+    - Exit Criteria全項目達成
+  - **P2-2: Quick-Reply Feature Re-enablement完了（2025-07-27 20:00）**
+    - botUserId注入ミドルウェア実装
+    - Quick-ReplyがOAuthモードで動作可能に
+    - 動的botUserId解決（context.botUserId）
+    - Prometheusメトリクス追加
+  - 詳細: 
+    - `docs/claude/work-reports/2025-07-27_phase2_p0_dependency_upgrade_report.md`
+    - `docs/claude/work-reports/2025-07-27_phase2_p2-1_getSlackClient_report.md`
+    - `docs/claude/work-reports/2025-07-27_p2-2_quick_reply_implementation_report.md`
+
 - **OAuth Phase 1完了（2025-07-27）**
   - 全テスト（A-1〜A-4）成功
   - グローバルエラーハンドラー実装
@@ -184,29 +204,32 @@ node scripts/test-thread-deep-link-simple.js
 
 ## 🎯 次の作業候補
 
-### OAuth Phase 1テスト継続
-1. **A-2テストのDB保存エラー修正**:
-   - [ ] Prismaスキーマ確認（複合ユニークキー制約）
-   - [ ] SlackInstallationStore.tsでenterpriseId null処理追加
-   - [ ] DB保存成功後、`/help`コマンドで動作確認
-2. **A-2テスト完了**: OAuth新ワークスペースインストール確認
-3. **A-3テスト実行**: Canary共存動作テスト
-   - `SLACK_OAUTH_ENABLED=true` + 環境変数トークン残し
-   - 旧WS: `/todo`が環境変数トークンで動作
-   - 新WS: `/todo`がOAuthトークンで動作
-4. **A-4テスト実行**: トークン無効化と再インストール確認
-5. **自動テスト追加**: SlackInstallationStore roundtrip, authorize fallback
-6. **Runtime健康チェック**: Redis/BullMQ/Slack Web API確認
+### Phase 2実装継続
+1. **P2-2テストと検証** (4時間)
+   - 負荷テスト実装（50 msg/s）
+   - 新規OAuthワークスペースでの動作確認
+   - キャッシュヒット率の測定
+   - ドキュメント更新（CHANGELOG.md, README.md）
 
-### Kiroタスクから（`.kiro/specs/slack-personal-assistant/tasks.md`より）
-- **Sprint 2進行中**: 現在62%→69%完了
-- **Task 3 (OAuth)**: Phase 1テスト実行中
-- **Task 10 (Smart Reply)**: Deep Link実装で一部完了
+2. **P2-3: Worker Gradual Migration** (24時間)
+   - reminderキューのcanary実装
+   - reuseRedis有効化
+   - limiter設定（50/60000）
+   - 段階的移行計画
+
+3. **P2-4: Performance Optimization & Monitoring** (12時間)
+   - Prometheusダッシュボード作成
+   - パフォーマンス最適化
+   - 24時間カナリーテスト
+
+4. **P2-5: Error Handling & User Experience** (8時間)
+   - エラーメッセージの改善
+   - ユーザーフレンドリーな再認証フロー
 
 ### 直近の技術的タスク
-1. **OAuth Phase 1完了後**: フォルダアクセス機能のinvalid_authエラー修正
-2. **Deep Linkスレッドパネル自動表示問題**（低優先度、現状維持）
-3. **フォルダ選定基準の明確化**
+1. **パフォーマンステスト実行**: `npm run test:performance`でExit Criteria確認
+2. **メトリクス監視**: `/api/cache/stats`でキャッシュ状況確認
+3. **負荷テスト**: 500チーム同時アクセスシミュレーション
 
 ## 💡 Tips
 
@@ -469,7 +492,7 @@ SLACK_BOT_USER_ID=U旧ワークスペースのBOT_USER_ID
   - 実装時のチェックリスト
 
 ---
-*最終更新: 2025-07-27 14:20 by Claude Code*
+*最終更新: 2025-07-27 17:00 by Claude Code*
 
 ## 📝 ドキュメンテーション方針（重要）
 > 適宜、ドキュメンテーションも怠らないようにお願いします。あなたが落ちてしまって再起動した際や、Kiroに対して、状況がよくわかるようにドキュメンテーションをしてください。未来の自分を助けるドキュメンテーションです。

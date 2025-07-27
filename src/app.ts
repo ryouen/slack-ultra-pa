@@ -8,6 +8,8 @@ import { initializeMetrics } from '@/config/metrics';
 import { initializeTracing } from '@/config/tracing';
 import { authorize } from '@/services/slackAuthorize';
 import { slackInstallationStore } from '@/services/slackInstallationStore';
+import { initializeSlackClientStore } from '@/utils/getSlackClient';
+import { injectBotUserId } from '@/middleware/injectBotUserId';
 import express from 'express';
 import apiRoutes from '@/routes/api';
 
@@ -75,9 +77,18 @@ async function startApp() {
     await initializeDatabase();
     logger.info('Database initialized');
     
+    // Initialize Slack client store
+    initializeSlackClientStore(slackInstallationStore);
+    logger.info('Slack client store initialized');
+    
     // Initialize job queue service
     await jobQueueService.initialize();
     logger.info('Job queue service initialized');
+
+    // Apply middleware to inject botUserId into context for all events
+    // This enables Quick-Reply to work with OAuth dynamic tokens
+    app.use(injectBotUserId);
+    logger.info('Bot user ID injection middleware configured');
 
     // Setup Slack routes
     await setupRoutes(app);

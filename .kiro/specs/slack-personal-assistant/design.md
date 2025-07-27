@@ -602,10 +602,14 @@ interface SlackClientUtil {
 // LRU Cache Configuration
 interface AuthCacheConfig {
   max: 500                    // Maximum 500 teams
-  ttl: 10 * 60 * 1000        // 10 minutes TTL
+  ttl: 10 * 60 * 1000        // 10 minutes TTL (600 seconds)
   updateAgeOnGet: true        // Reset TTL on access
   dispose: (value: AuthorizeResult, key: string) => void
 }
+
+// Reference: npm lru-cache v7+ 
+// https://www.npmjs.com/package/lru-cache
+// Memory estimation: ~200KB per cached team × 500 = ~100MB max
 
 // Enhanced Worker Configuration
 interface WorkerConfig {

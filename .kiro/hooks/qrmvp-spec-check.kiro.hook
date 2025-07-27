@@ -6,7 +6,12 @@
   "when": {
     "type": "fileEdited",
     "patterns": [
-      "src/**/*.{ts,js,tsx,jsx,json}"
+      "src/**/*.{ts,js,tsx,jsx,json}",
+      "src/{handlers,utils,services}/**/*.ts",
+      "src/utils/getSlackClient.ts",
+      "monitoring/phase2-metrics.yml",
+      "docs/project-management/risk-register.md",
+      "CHANGELOG.md"
     ]
   },
   "then": {

@@ -1,0 +1,192 @@
+# Phase 2 Monitoring Configuration
+
+## Prometheus Metrics
+
+### Redis Connection Monitoring
+```yaml
+- name: redis_connected_clients
+  help: "Number of connected Redis clients"
+  type: gauge
+  labels: ["instance", "role"]
+  alerts:
+    warning: 
+      threshold: 800
+      duration: "5m"
+      message: "Redis connection count approaching limit"
+    critical:
+      threshold: 1000
+      duration: "2m"
+      message: "Redis connection pool near exhaustion"
+```
+
+### Auth Cache Performance
+```yaml
+- name: auth_cache_hit_rate
+  help: "Authentication cache hit rate percentage"
+  type: gauge
+  labels: ["cache_type"]
+  alerts:
+    warning:
+      threshold: 0.70  # 70%
+      duration: "5m"
+      message: "Auth cache hit rate below target"
+    critical:
+      threshold: 0.50  # 50%
+      duration: "2m"
+      message: "Auth cache severely underperforming"
+
+- name: auth_cache_memory_usage
+  help: "Memory usage of authentication cache in bytes"
+  type: gauge
+  alerts:
+    warning:
+      threshold: 104857600  # 100MB
+      duration: "10m"
+      message: "Auth cache memory usage high"
+```
+
+### API Latency
+```yaml
+- name: api_latency_p95
+  help: "95th percentile API response latency"
+  type: histogram
+  labels: ["endpoint", "method"]
+  alerts:
+    warning:
+      threshold: 0.2  # 200ms
+      duration: "5m"
+      message: "API latency above target"
+    critical:
+      threshold: 1.0  # 1s
+      duration: "10m"
+      message: "API latency critically high"
+```
+
+### Invalid Auth Tracking
+```yaml
+- name: invalid_auth_errors_total
+  help: "Total number of invalid_auth errors"
+  type: counter
+  labels: ["team_id", "error_type"]
+  alerts:
+    info:
+      rate: "10/1m"  # 10 per minute
+      message: "High rate of invalid_auth errors detected"
+```
+
+## Grafana Dashboard Panels
+
+### Panel 1: Redis Health
+- **Query**: `redis_connected_clients`
+- **Visualization**: Time series
+- **Thresholds**: Warning=800, Critical=1000
+- **Time Range**: Last 24h
+
+### Panel 2: Cache Performance
+- **Query**: `auth_cache_hit_rate * 100`
+- **Visualization**: Stat panel
+- **Unit**: Percent (0-100)
+- **Target**: ≥90%
+
+### Panel 3: API Latency Distribution
+- **Query**: `histogram_quantile(0.95, api_latency_p95)`
+- **Visualization**: Time series
+- **Unit**: Seconds
+- **Target**: <0.2s
+
+### Panel 4: Error Rate
+- **Query**: `rate(invalid_auth_errors_total[5m])`
+- **Visualization**: Time series
+- **Unit**: Errors per second
+- **Alert**: >0.1/s
+
+## Prometheus Rules
+
+### P2-0 BullMQ Monitoring Rules
+```yaml
+groups:
+- name: phase2_bullmq
+  rules:
+  - alert: RedisConnectedClientsHigh
+    expr: redis_connected_clients > 800
+    for: 5m
+    labels:
+      severity: warning
+      phase: "2"
+    annotations:
+      summary: "Redis has >800 client connections"
+      description: "Redis connected clients: {{ $value }}"
+      
+  - alert: BullMQJobFailureRate
+    expr: rate(bull_jobs_failed_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: critical
+      phase: "2"
+    annotations:
+      summary: "High BullMQ job failure rate"
+      description: "Job failure rate: {{ $value }}/sec"
+```
+
+## Alerting Rules
+
+### Slack Integration
+```yaml
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'slack-alerts'
+
+receivers:
+- name: 'slack-alerts'
+  slack_configs:
+  - api_url: '${SLACK_WEBHOOK_URL}'
+    channel: '#dev-alerts'
+    title: 'Phase 2 Alert: {{ .GroupLabels.alertname }}'
+    text: '{{ range .Alerts }}{{ .Annotations.message }}{{ end }}'
+```
+
+### PagerDuty Integration (Critical Only)
+```yaml
+- name: 'pagerduty-critical'
+  pagerduty_configs:
+  - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+    description: 'Critical Phase 2 Issue: {{ .GroupLabels.alertname }}'
+```
+
+## Health Check Endpoints
+
+### Application Health
+- **Endpoint**: `/health/phase2`
+- **Checks**: 
+  - Redis connectivity
+  - Cache functionality
+  - Database connection
+  - LRU cache statistics
+
+### Metrics Export
+- **Endpoint**: `/metrics`
+- **Format**: Prometheus format
+- **Security**: Internal network only
+
+## Runbook References
+
+### High Cache Miss Rate
+1. Check Redis connectivity
+2. Verify TTL configuration (600s)
+3. Review token invalidation patterns
+4. Scale cache size if needed
+
+### High API Latency
+1. Check database query performance
+2. Verify Redis response times
+3. Review LRU cache hit patterns
+4. Check external API dependencies
+
+### Redis Connection Issues
+1. Monitor connection pool usage
+2. Verify reuseRedis configuration
+3. Check for connection leaks
+4. Scale Redis cluster if needed

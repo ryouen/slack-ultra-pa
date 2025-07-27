@@ -5,21 +5,33 @@ import { getPrismaClient } from '@/config/database';
 import { logger } from '@/utils/logger';
 import { getChannelId, getUserId } from '@/utils/getChannelId';
 import { sendReply } from '@/utils/sendReply';
+import { 
+  quickReplyProcessed, 
+  quickReplyErrors,
+  measureQuickReplyDuration 
+} from '@/metrics/quickReplyMetrics';
 
-export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
+export function setupQuickReplyHandler(app: App): void {
   const messageAnalyzer = new MessageAnalyzer();
   const uiBuilder = new SmartReplyUIBuilder();
   const prisma = getPrismaClient();
 
   // メッセージイベントハンドラー（ユーザー間メンション検出）
   app.event('message', async ({ event, client, context, body }) => {
+    const timer = measureQuickReplyDuration('message_handler');
+    
     // TypeScript型ガード
     if (!('text' in event) || !event.text) return;
     if (!('user' in event) || !event.user) return;
     if (!('channel' in event)) return;
     
-    // Bot自身の発言は無視
-    if (event.user === BOT_USER_ID) return;
+    // Bot自身の発言は無視（動的に解決）
+    const botUserId = context.botUserId || process.env.SLACK_BOT_USER_ID;
+    if (!botUserId) {
+      logger.warn('No bot user ID available in context or environment');
+      return;
+    }
+    if (event.user === botUserId) return;
 
     try {
       // メンション検出（<@UXXXXXX>形式）
@@ -42,7 +54,7 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
         if (mentionedUserId === event.user) continue;
         
         // ボットへのメンションはスキップ（app_mentionで処理される）
-        if (mentionedUserId === BOT_USER_ID) continue;
+        if (mentionedUserId === botUserId) continue;
 
         // メンションされたユーザーの情報を確認
         try {
@@ -220,8 +232,15 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
 
   // app_mentionイベントハンドラー（追加）
   app.event('app_mention', async ({ event, client, context, body }) => {
-    // Bot自身の発言は無視
-    if (event.user === BOT_USER_ID) return;
+    const timer = measureQuickReplyDuration('app_mention_handler');
+    
+    // Bot自身の発言は無視（動的に解決）
+    const botUserId = context.botUserId || process.env.SLACK_BOT_USER_ID;
+    if (!botUserId) {
+      logger.warn('No bot user ID available for app_mention');
+      return;
+    }
+    if (event.user === botUserId) return;
 
     try {
       logger.info('Quick reply: Processing app_mention', {
@@ -270,5 +289,5 @@ export function setupQuickReplyHandler(app: App, BOT_USER_ID: string): void {
   // thread_reply_jumpアクションハンドラーを削除
   // 現在は全てpermalink URLボタンを使用して直接スレッドに飛ぶため不要
 
-  logger.info('Quick Reply Handler configured', { BOT_USER_ID });
+  logger.info('Quick Reply Handler configured with dynamic bot user ID resolution');
 }

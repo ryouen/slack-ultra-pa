@@ -2,6 +2,7 @@ import { Queue, Worker, Job, QueueOptions, WorkerOptions } from 'bullmq';
 import { Redis } from 'ioredis';
 import { logger } from '@/utils/logger';
 import { createBullMQRedisClient } from '@/config/redis';
+import { getSlackClient, handleInvalidAuth } from '@/utils/getSlackClient';
 
 // Job Types
 export enum JobType {
@@ -39,7 +40,7 @@ export interface CalendarSyncJobData {
 
 export interface CleanupJobData {
   targetType: 'completed_jobs' | 'expired_tokens' | 'old_logs';
-  olderThan: Date;
+  olderThan: number; // epoch milliseconds
 }
 
 export interface TokenHealthCheckJobData {
@@ -93,8 +94,14 @@ export class JobQueueService {
     const queueOptions: QueueOptions = {
       connection: this.redis,
       defaultJobOptions: {
-        removeOnComplete: 100, // Keep last 100 completed jobs
-        removeOnFail: 50,      // Keep last 50 failed jobs
+        removeOnComplete: {
+          count: 100,
+          age: 60 * 60 * 24 // Keep completed jobs for 24 hours
+        },
+        removeOnFail: {
+          count: 50,
+          age: 60 * 60 * 24 * 7 // Keep failed jobs for 7 days
+        },
         attempts: 3,           // Retry failed jobs 3 times
         backoff: {
           type: 'exponential',
@@ -116,6 +123,11 @@ export class JobQueueService {
     const workerOptions: WorkerOptions = {
       connection: this.redis,
       concurrency: 5, // Process up to 5 jobs concurrently per worker
+      // Rate limiter to avoid Slack API 429 errors
+      limiter: {
+        max: 59, // Max 59 calls
+        duration: 60000 // Per 60 seconds (1 minute)
+      }
     };
 
     // Reminder worker
@@ -293,13 +305,13 @@ export class JobQueueService {
     // Daily cleanup at 2 AM
     await this.scheduleCleanupJob({
       targetType: 'completed_jobs',
-      olderThan: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // 7 days ago
+      olderThan: Date.now() - 7 * 24 * 60 * 60 * 1000 // 7 days ago
     }, '0 2 * * *');
 
     // Weekly token cleanup on Sundays at 3 AM
     await this.scheduleCleanupJob({
       targetType: 'expired_tokens',
-      olderThan: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago
+      olderThan: Date.now() - 30 * 24 * 60 * 60 * 1000 // 30 days ago
     }, '0 3 * * 0');
 
     // Token health check every 10 minutes
@@ -461,18 +473,19 @@ export class JobQueueService {
       logger.info('Processing cleanup job', { 
         jobId: job.id, 
         targetType, 
-        olderThan: olderThan.toISOString() 
+        olderThan: new Date(olderThan).toISOString() 
       });
 
+      const olderThanDate = new Date(olderThan);
       switch (targetType) {
         case 'completed_jobs':
-          await this.cleanupCompletedJobs(olderThan);
+          await this.cleanupCompletedJobs(olderThanDate);
           break;
         case 'expired_tokens':
-          await this.cleanupExpiredTokens(olderThan);
+          await this.cleanupExpiredTokens(olderThanDate);
           break;
         case 'old_logs':
-          await this.cleanupOldLogs(olderThan);
+          await this.cleanupOldLogs(olderThanDate);
           break;
       }
 
@@ -500,8 +513,6 @@ export class JobQueueService {
         teamId 
       });
 
-      const { slackInstallationStore } = await import('@/services/slackInstallationStore');
-      const { WebClient } = await import('@slack/web-api');
       const { getPrismaClient } = await import('@/config/database');
       
       const prisma = getPrismaClient();
@@ -521,7 +532,7 @@ export class JobQueueService {
         for (const installation of installations) {
           checkedCount++;
           try {
-            const client = new WebClient(installation.botToken);
+            const client = await getSlackClient(installation.teamId, installation.enterpriseId || undefined);
             await client.auth.test();
             logger.debug(`Token valid for team ${installation.teamId}`);
           } catch (error: any) {
@@ -529,10 +540,7 @@ export class JobQueueService {
               invalidCount++;
               logger.warn(`Invalid token detected for team ${installation.teamId}`);
               
-              await slackInstallationStore.deleteInstallation({
-                teamId: installation.teamId,
-                enterpriseId: undefined
-              });
+              await handleInvalidAuth(installation.teamId, installation.enterpriseId || undefined);
               
               logger.info(`Deleted invalid installation for team ${installation.teamId}`);
             } else {
@@ -549,7 +557,7 @@ export class JobQueueService {
         if (installation) {
           checkedCount = 1;
           try {
-            const client = new WebClient(installation.botToken);
+            const client = await getSlackClient(installation.teamId, installation.enterpriseId || undefined);
             await client.auth.test();
             logger.debug(`Token valid for team ${teamId}`);
           } catch (error: any) {
@@ -557,10 +565,7 @@ export class JobQueueService {
               invalidCount = 1;
               logger.warn(`Invalid token detected for team ${teamId}`);
               
-              await slackInstallationStore.deleteInstallation({
-                teamId,
-                enterpriseId: undefined
-              });
+              await handleInvalidAuth(teamId, undefined);
               
               logger.info(`Deleted invalid installation for team ${teamId}`);
             }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import oauthRoutes from './oauth';
 import { healthCheckService } from '@/services/healthCheckService';
 import { logger } from '@/utils/logger';
+import { getCacheStats } from '@/utils/getSlackClient';
 
 const router = Router();
 
@@ -51,6 +52,21 @@ router.get('/live', (req, res) => {
     alive: true, 
     uptime: process.uptime(),
     timestamp: new Date().toISOString() 
+  });
+});
+
+// Slack client cache statistics
+router.get('/cache/stats', (req, res) => {
+  const stats = getCacheStats();
+  res.json({
+    ...stats,
+    timestamp: new Date().toISOString(),
+    targetHitRate: 90,
+    targetMemoryMB: 100,
+    meetsTargets: {
+      hitRate: stats.hitRate >= 90,
+      memory: stats.memoryUsage < (100 * 1024 * 1024)
+    }
   });
 });
 

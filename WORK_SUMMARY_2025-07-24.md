@@ -32,7 +32,7 @@
 
 ### 5. 包括的な設計分析
 **作成ドキュメント**:
-- `DESIGN_ANALYSIS_REPORT.md` - 全体設計の分析と改善提案
+- `docs/analysis/DESIGN_ANALYSIS_REPORT.md` - 全体設計の分析と改善提案
 - `KIRO_UPDATE_LOG.md` - 実装変更の詳細記録
 
 ## 発見された重要な問題

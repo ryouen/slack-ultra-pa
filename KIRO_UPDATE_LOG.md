@@ -261,7 +261,7 @@ Kiro（Claude Sonnet 4.0）との共同作業における情報共有のため�
    - `scripts/check-runtime-compatibility.ts` - 実行時互換性チェック
 
 2. **影響分析ドキュメント**
-   - `IMPROVEMENT_IMPACT_ANALYSIS.md` - 詳細な影響分析レポート
+   - `docs/analysis/IMPROVEMENT_IMPACT_ANALYSIS.md` - 詳細な影響分析レポート
    - `compatibility-report.json` - 自動生成された互換性レポート
 
 #### 検証結果サマリー

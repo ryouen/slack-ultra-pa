@@ -5,7 +5,6 @@ import { t, detectLanguage, getUserLanguage } from '@/i18n';
 import { registerHierarchyRoutes } from './hierarchyRoutes';
 import { registerMentionRoutes } from './mentionRoutes';
 import { setupQuickReplyHandler } from '@/handlers/quickReplyHandler';
-import { resolveBotUserId } from '@/config/botConfig';
 import { Router } from 'express';
 import oauthRoutes from './oauth';
 
@@ -13,16 +12,7 @@ import oauthRoutes from './oauth';
  * Setup all Slack Bolt routes and handlers
  */
 export async function setupRoutes(app: App): Promise<void> {
-  // Resolve Bot User ID for Quick Reply handler (skip in OAuth mode)
   const isOAuthEnabled = process.env.SLACK_OAUTH_ENABLED === 'true';
-  let BOT_USER_ID: string | undefined;
-  
-  if (!isOAuthEnabled) {
-    BOT_USER_ID = await resolveBotUserId(app);
-    logger.info('Bot User ID resolved for routes', { BOT_USER_ID });
-  } else {
-    logger.info('OAuth mode enabled, skipping Bot User ID resolution');
-  }
   // Middleware for metrics collection
   app.use(async ({ next, payload }) => {
     const startTime = Date.now();
@@ -1091,13 +1081,10 @@ export async function setupRoutes(app: App): Promise<void> {
   // Register mention routes
   registerMentionRoutes(app);
   
-  // Setup Quick Reply handler for bot mentions (skip in OAuth mode)
-  if (!isOAuthEnabled && BOT_USER_ID) {
-    setupQuickReplyHandler(app, BOT_USER_ID);
-    logger.info('Quick Reply handler configured');
-  } else {
-    logger.info('OAuth mode enabled, skipping Quick Reply handler setup');
-  }
+  // Setup Quick Reply handler for bot mentions
+  // Now works in both OAuth and non-OAuth modes thanks to injectBotUserId middleware
+  setupQuickReplyHandler(app);
+  logger.info('Quick Reply handler configured for dynamic bot user ID resolution');
 
   logger.info('Slack routes configured successfully');
 }

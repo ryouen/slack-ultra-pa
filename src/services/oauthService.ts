@@ -3,6 +3,7 @@ import { WebClient } from '@slack/web-api';
 import { PrismaClient } from '@prisma/client';
 import { config } from '@/config/environment';
 import { logger } from '@/utils/logger';
+import { getSlackClient as getSlackClientUtil } from '@/utils/getSlackClient';
 
 const prisma = new PrismaClient();
 
@@ -120,19 +121,11 @@ export const installer = new InstallProvider({
 
 /**
  * Get a WebClient instance for a specific team
+ * @deprecated Use getSlackClient from '@/utils/getSlackClient' instead
  */
 export async function getSlackClient(teamId: string): Promise<WebClient> {
-  const installation = await prisma.slackInstallation.findFirst({
-    where: {
-      teamId,
-    },
-  });
-  
-  if (!installation || !installation.botToken) {
-    throw new Error(`No installation found for team: ${teamId}`);
-  }
-  
-  return new WebClient(installation.botToken);
+  // Delegate to the new utility function
+  return getSlackClientUtil(teamId);
 }
 
 /**
